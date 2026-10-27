@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#071224" />
+      <stop offset="100%" stop-color="#020408" />
+    </radialGradient>
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f0ff" stop-opacity="1" />
+      <stop offset="40%" stop-color="#0088ff" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#9d00ff" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="bladeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#00f0ff" />
+      <stop offset="100%" stop-color="#0044ff" />
+    </linearGradient>
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bg)" />
+
+  <!-- Outer Ring with dial ticks -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#00f0ff" stroke-width="3" stroke-opacity="0.25" />
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#00f0ff" stroke-width="2" stroke-dasharray="8 14" stroke-opacity="0.5" />
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#ff0055" stroke-width="2" stroke-opacity="0.3" />
+
+  <!-- Glowing Core Aura -->
+  <circle cx="256" cy="256" r="140" fill="url(#coreGlow)" filter="url(#neon)" />
+
+  <!-- Chrono Vessel / Kinetic Tri-Blade -->
+  <g filter="url(#neon)">
+    <!-- Main Apex Blade -->
+    <path d="M 256 70 L 295 240 L 256 220 L 217 240 Z" fill="url(#bladeGrad)" stroke="#ffffff" stroke-width="2" />
+    <!-- Left Wing -->
+    <path d="M 217 240 L 95 350 L 230 310 L 256 220 Z" fill="url(#bladeGrad)" stroke="#00f0ff" stroke-width="2" />
+    <!-- Right Wing -->
+    <path d="M 295 240 L 417 350 L 282 310 L 256 220 Z" fill="url(#bladeGrad)" stroke="#00f0ff" stroke-width="2" />
+    <!-- Center Crystal -->
+    <circle cx="256" cy="256" r="28" fill="#ffffff" stroke="#00f0ff" stroke-width="4" />
+    <circle cx="256" cy="256" r="14" fill="#ff0055" />
+  </g>
+
+  <!-- Time Vector Slices -->
+  <line x1="80" y1="256" x2="432" y2="256" stroke="#00f0ff" stroke-width="2" stroke-dasharray="16 20" stroke-opacity="0.4" />
+  <line x1="256" y1="80" x2="256" y2="432" stroke="#ff0055" stroke-width="1.5" stroke-dasharray="12 16" stroke-opacity="0.3" />
+</svg>

@@ -1,0 +1,18 @@
+{
+  "name": "Chrono Surge: Beginning",
+  "short_name": "ChronoSurge",
+  "description": "Fast-paced futuristic arena action roguelite with time dilation combat.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#030712",
+  "theme_color": "#00f0ff",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

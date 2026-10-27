@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#030712">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Chrono Surge: Beginning — a fast futuristic arena action roguelite. Bend time, slash through waves, and climb the leaderboard. Plays on desktop and phone.">
+  <title>CHRONO SURGE: BEGINNING</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/beginning.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="three-arena" aria-hidden="true"></canvas>
+    <canvas id="game-canvas" aria-label="Chrono Surge arena"></canvas>
+
+    <div id="crt-overlay" class="crt-overlay"></div>
+    <div id="vignette-overlay" class="vignette-overlay"></div>
+    <div id="overdrive-overlay" class="overdrive-overlay"></div>
+
+    <!-- ================= HUD ================= -->
+    <div id="hud" class="hud-layer hidden">
+      <div class="hud-top">
+        <div class="hud-box score-box">
+          <span class="hud-label">SCORE</span>
+          <span id="hud-score" class="hud-value cyber-glow-cyan">0</span>
+        </div>
+        <div class="hud-box wave-box">
+          <span class="hud-label">WAVE</span>
+          <div class="wave-display">
+            <span id="hud-wave" class="hud-value cyber-glow-yellow">WAVE 01</span>
+            <div id="wave-progress-bar" aria-label="Wave cleared"><div id="wave-progress-fill"></div></div>
+          </div>
+        </div>
+        <div class="hud-box kills-box">
+          <span class="hud-label">KILLS</span>
+          <span id="hud-kills" class="hud-value">0</span>
+        </div>
+        <div class="hud-box time-box">
+          <span class="hud-label">TIME</span>
+          <span id="hud-time" class="hud-value">0:00</span>
+        </div>
+        <div class="hud-box multiplier-box">
+          <span class="hud-label">MULTIPLIER</span>
+          <span id="hud-multiplier" class="hud-value cyber-glow-magenta">1.0x</span>
+        </div>
+        <button id="btn-hud-pause" class="hud-pause-btn" aria-label="Pause game">II</button>
+      </div>
+
+      <div class="hud-left">
+        <div class="style-rank-container">
+          <div class="style-rank-header">
+            <span class="hud-label">STYLE RANK</span>
+            <span id="style-rank-letter" class="style-letter rank-d">D</span>
+          </div>
+          <div class="style-meter-track"><div id="style-meter-fill" class="style-meter-fill"></div></div>
+          <span id="style-rank-title" class="style-title">DULL</span>
+        </div>
+        <div id="combo-callout" class="combo-callout">
+          <span id="combo-count">0</span>
+          <span class="combo-label">COMBO</span>
+        </div>
+      </div>
+
+      <div class="hud-right" id="hud-right-tray">
+        <div class="augments-tray">
+          <span class="hud-label">ACTIVE BUILD</span>
+          <div class="build-power-row">
+            <span class="build-power-label">POWER</span>
+            <span id="build-power-value" class="build-power-value">0</span>
+          </div>
+          <div id="build-power-pips" class="build-power-pips" aria-label="Current build power"></div>
+          <div id="augments-list" class="augments-list"></div>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div class="core-meters">
+          <div class="meter-group" id="shield-meter-group">
+            <div class="meter-header"><span class="meter-label">SHIELD</span><span id="shield-value" class="meter-val">100%</span></div>
+            <div class="meter-track shield-track"><div id="shield-fill" class="meter-fill shield-fill" style="width:100%"></div></div>
+          </div>
+          <div class="meter-group">
+            <div class="meter-header"><span class="meter-label">HULL</span><span id="hp-value" class="meter-val">100%</span></div>
+            <div class="meter-track hp-track"><div id="hp-fill" class="meter-fill hp-fill" style="width:100%"></div></div>
+          </div>
+          <div class="meter-group" id="chrono-meter-group">
+            <div class="meter-header"><span class="meter-label">CHRONO</span><span id="chrono-value" class="meter-val">READY</span></div>
+            <div class="meter-track chrono-track"><div id="chrono-fill" class="meter-fill chrono-fill" style="width:100%"></div></div>
+          </div>
+          <div class="meter-group emp-group" id="emp-meter-group">
+            <div class="meter-header"><span class="meter-label">EMP</span><span id="emp-value" class="meter-val">CHARGING</span></div>
+            <div class="meter-track emp-track"><div id="emp-fill" class="meter-fill emp-fill" style="width:0%"></div></div>
+          </div>
+          <div class="meter-group overdrive-group" id="overdrive-meter-group">
+            <div class="meter-header"><span class="meter-label">OVERDRIVE</span><span id="overdrive-value" class="meter-val">0%</span></div>
+            <div class="meter-track overdrive-track"><div id="overdrive-fill" class="meter-fill overdrive-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="controls-hint desktop-only">
+          <span>WASD move</span><span class="dot">•</span>
+          <span>E pulse</span><span class="dot">•</span>
+          <span>Hold LMB: dilate · release: slash</span><span class="dot">•</span>
+          <span>RMB/Space EMP</span><span class="dot">•</span>
+          <span class="overdrive-hint-btn" id="btn-overdrive-touch">F Overdrive</span>
+        </div>
+      </div>
+
+      <div id="boss-hud" class="boss-hud hidden">
+        <div class="boss-name-row">
+          <span class="boss-skull">⚠ APEX ANOMALY</span>
+          <span id="boss-phase-value" class="boss-phase-value">PHASE 1 // TIER 1</span>
+          <span id="boss-name" class="boss-name">APEX OVERLORD</span>
+        </div>
+        <div class="boss-bar-track"><div id="boss-bar-fill" class="boss-bar-fill"></div></div>
+        <div class="boss-hp-row"><span>BOSS INTEGRITY</span><strong id="boss-hp-value">0 HP</strong></div>
+      </div>
+
+      <!-- Tutorial banner -->
+      <div id="tutorial-banner" class="tutorial-banner hidden" role="status" aria-live="polite">
+        <div class="tutorial-head">
+          <span id="tutorial-step-title" class="tutorial-step-title">01 // MOVEMENT</span>
+          <button id="btn-tutorial-skip" class="tutorial-skip">Skip training</button>
+        </div>
+        <p id="tutorial-step-text" class="tutorial-step-text"></p>
+        <div class="tutorial-track"><div id="tutorial-step-fill" class="tutorial-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- ================= MOBILE CONTROLS ================= -->
+    <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
+      <div id="joystick-zone" class="joystick-zone">
+        <div id="joystick-base" class="joystick-base"><div id="joystick-knob" class="joystick-knob"></div></div>
+      </div>
+      <div id="aim-zone" class="aim-zone"></div>
+      <div class="touch-buttons">
+        <button id="btn-touch-fire" class="touch-btn fire-btn">PULSE</button>
+        <button id="btn-touch-emp" class="touch-btn emp-btn">EMP</button>
+        <button id="btn-touch-overdrive" class="touch-btn od-btn">OVER<br>DRIVE</button>
+      </div>
+      <div class="aim-hint">Hold & drag right side to slow time · release to slash</div>
+    </div>
+
+    <!-- Boss intro / banner -->
+    <div id="boss-intro" class="boss-intro hidden" aria-live="assertive">
+      <div class="boss-intro-kicker">WARNING // APEX ANOMALY INBOUND</div>
+      <div id="boss-intro-name" class="boss-intro-name">APEX OVERLORD</div>
+      <div class="boss-intro-sub">Watch the telegraphs. Save Overdrive for phase shifts.</div>
+    </div>
+    <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+    <div id="sync-pill" class="sync-pill" title="Save status">● LOCAL</div>
+
+    <!-- ================= MAIN MENU ================= -->
+    <div id="screen-title" class="ui-screen active">
+      <div class="menu-shell">
+        <div class="menu-brand">
+          <h1 class="game-title" data-text="CHRONO SURGE">CHRONO SURGE</h1>
+          <div class="game-subtitle">BEGINNING</div>
+          <p class="tagline">Bend time. Cut the line. Outlast the swarm.</p>
+          <div class="menu-operative">
+            <div id="menu-avatar" class="menu-avatar"></div>
+            <div>
+              <div id="menu-name" class="menu-name">OPERATIVE</div>
+              <div id="menu-level" class="menu-level">Level 1 · 0 shards</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-core">
+          <div class="section-title">Chrono-core</div>
+          <div class="core-grid">
+            <button class="core-card active" data-core="vanguard">
+              <div class="core-icon vanguard-icon"></div>
+              <div class="core-info"><div class="core-name">VANGUARD</div><div class="core-desc">Balanced. Fast Chrono recharge.</div></div>
+            </button>
+            <button class="core-card" data-core="reaper">
+              <div class="core-icon reaper-icon"></div>
+              <div class="core-info"><div class="core-name">VOID REAPER</div><div class="core-desc">Long, heavy slashes. Fragile.</div></div>
+            </button>
+            <button class="core-card" data-core="valkyrie">
+              <div class="core-icon valkyrie-icon"></div>
+              <div class="core-info"><div class="core-name">PULSE VALKYRIE</div><div class="core-desc">Faster pulse, bigger EMP.</div></div>
+            </button>
+          </div>
+        </div>
+
+        <nav class="menu-nav" aria-label="Main menu">
+          <button id="btn-start" class="cyber-btn primary-btn menu-main-btn">Play endless</button>
+          <button id="btn-daily" class="cyber-btn secondary-btn">Daily challenge <span id="daily-chip" class="chip">—</span></button>
+          <button id="btn-training" class="cyber-btn secondary-btn">Training</button>
+          <div class="menu-grid">
+            <button class="menu-tile" data-open="screen-armory"><span>🎨</span>Armory</button>
+            <button class="menu-tile" data-open="screen-skills"><span>⚙️</span>Skill tree</button>
+            <button class="menu-tile" data-open="screen-achievements"><span>🏆</span>Achievements</button>
+            <button class="menu-tile" data-open="screen-leaderboard"><span>📈</span>Leaderboard</button>
+            <button class="menu-tile" data-open="screen-profile"><span>👤</span>Profile</button>
+            <button class="menu-tile" data-open="screen-settings"><span>🔧</span>Settings</button>
+          </div>
+        </nav>
+
+        <div class="meta-stats-row">
+          <div class="meta-item">Best score <span id="title-high-score">0</span></div>
+          <div class="meta-item">Best wave <span id="title-best-wave">0</span></div>
+          <div class="meta-item">Max style <span id="title-max-style">D</span></div>
+          <div class="meta-item">Slices <span id="title-total-slices">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= ONBOARDING ================= -->
+    <div id="screen-onboarding" class="ui-screen hidden">
+      <div class="cyber-card panel-card onboarding-card">
+        <div class="briefing-kicker">NEW OPERATIVE</div>
+        <h2 class="panel-title">Choose your callsign</h2>
+        <p class="panel-sub">This name appears on the leaderboard. You can change it later in Profile.</p>
+        <label class="field">
+          <span>Callsign</span>
+          <input id="onboard-name" maxlength="24" autocomplete="nickname" placeholder="OPERATIVE-123">
+        </label>
+        <p class="panel-sub">Training takes about two minutes and teaches every ability with live targets.</p>
+        <div class="action-row">
+          <button id="btn-onboard-train" class="cyber-btn primary-btn">Start training</button>
+          <button id="btn-onboard-skip" class="cyber-btn secondary-btn">I've played before</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= THREAT BRIEFING ================= -->
+    <div id="screen-briefing" class="ui-screen hidden">
+      <div class="cyber-card briefing-card">
+        <div class="briefing-kicker" id="briefing-kicker">TACTICAL DATABASE // THREAT RECOGNITION</div>
+        <h2 class="briefing-title" id="briefing-title">KNOW THE ANOMALIES</h2>
+        <p class="briefing-sub" id="briefing-sub">Identify the attack pattern. Use the correct counter. Survive longer.</p>
+        <div class="threat-grid">
+          <article class="threat-card hunter-threat">
+            <div class="threat-top"><div class="threat-icon hunter-icon"></div><div><span class="threat-id">HUNTER</span><span class="threat-role">TRACKER · WAVE 1+</span></div></div>
+            <p class="threat-does">Chases you and fires precise red shots.</p>
+            <div class="threat-counter"><span>COUNTER</span><strong>Pulse it down or slash across its line.</strong></div>
+          </article>
+          <article class="threat-card orbiter-threat">
+            <div class="threat-top"><div class="threat-icon orbiter-icon"></div><div><span class="threat-id">ORBITER</span><span class="threat-role">AREA CONTROL · WAVE 4+</span></div></div>
+            <p class="threat-does">Circles at range. A yellow laser line telegraphs each shot.</p>
+            <div class="threat-counter"><span>COUNTER</span><strong>Close in and slash before the line goes solid.</strong></div>
+          </article>
+          <article class="threat-card dasher-threat">
+            <div class="threat-top"><div class="threat-icon dasher-icon"></div><div><span class="threat-id">DASHER</span><span class="threat-role">CHARGER · WAVE 6+</span></div></div>
+            <p class="threat-does">Shows a dashed red lane, then charges and drops a seeker.</p>
+            <div class="threat-counter"><span>COUNTER</span><strong>Sidestep the lane, punish the recovery.</strong></div>
+          </article>
+          <article class="threat-card phantom-threat">
+            <div class="threat-top"><div class="threat-icon phantom-icon"></div><div><span class="threat-id">PHANTOM</span><span class="threat-role">TELEPORTER · WAVE 9+</span></div></div>
+            <p class="threat-does">Blinks near you and fires splitting purple orbs.</p>
+            <div class="threat-counter"><span>COUNTER</span><strong>Dilate time, then slash on the reappear.</strong></div>
+          </article>
+        </div>
+        <div class="boss-brief">
+          <div class="boss-brief-icon">✦</div>
+          <div><span class="boss-brief-label">EVERY 10 WAVES // APEX OVERLORD</span><strong>Three rotating attack phases plus arena patterns. EMP clears bullet rings.</strong></div>
+        </div>
+        <div class="briefing-footer">
+          <span id="briefing-mode">MODE // ENDLESS</span>
+          <button id="btn-deploy" class="cyber-btn primary-btn"><span class="btn-text">Deploy</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= UPGRADE ================= -->
+    <div id="screen-upgrade" class="ui-screen hidden">
+      <div class="cyber-card upgrade-card-modal">
+        <div class="upgrade-header">
+          <div class="upgrade-badge">WAVE CLEARED</div>
+          <h2 class="upgrade-title">Choose an augment</h2>
+          <p class="upgrade-sub">Pick one. Combat is paused while you decide.</p>
+          <div class="augment-build-readout">
+            <span class="readout-label">CURRENT BUILD</span>
+            <span id="upgrade-build-power" class="readout-value">POWER 0</span>
+            <span id="upgrade-active-count" class="readout-muted">0 ACTIVE</span>
+          </div>
+        </div>
+        <div id="cards-container" class="cards-container"></div>
+        <div class="reroll-row">
+          <button id="btn-reroll" class="cyber-btn secondary-btn"><span>Reroll (<span id="reroll-count">1</span> left)</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= GAME OVER ================= -->
+    <div id="screen-gameover" class="ui-screen hidden">
+      <div class="cyber-card gameover-card">
+        <div class="glitch-title-wrap">
+          <h2 class="gameover-title" data-text="CORE COMPROMISED">CORE COMPROMISED</h2>
+          <div class="gameover-sub">Run complete. Rewards saved.</div>
+        </div>
+        <div class="run-stats-grid">
+          <div class="run-stat-box"><div class="stat-label">FINAL SCORE</div><div id="go-score" class="stat-value cyber-glow-cyan">0</div></div>
+          <div class="run-stat-box"><div class="stat-label">WAVE REACHED</div><div id="go-wave" class="stat-value cyber-glow-yellow">WAVE 01</div></div>
+          <div class="run-stat-box"><div class="stat-label">STYLE AT END</div><div id="go-style" class="stat-value cyber-glow-magenta">D</div></div>
+          <div class="run-stat-box"><div class="stat-label">SLICES</div><div id="go-slices" class="stat-value cyber-glow-green">0</div></div>
+          <div class="run-stat-box"><div class="stat-label">DEFLECTS</div><div id="go-deflects" class="stat-value cyber-glow-cyan">0</div></div>
+          <div class="run-stat-box"><div class="stat-label">BEST COMBO</div><div id="go-combo" class="stat-value cyber-glow-yellow">0x</div></div>
+          <div class="run-stat-box"><div class="stat-label">BEST WAVE EVER</div><div id="go-best-wave" class="stat-value cyber-glow-yellow">WAVE 01</div></div>
+          <div class="run-stat-box"><div class="stat-label">KILLS</div><div id="go-kills" class="stat-value cyber-glow-green">0</div></div>
+          <div class="run-stat-box"><div class="stat-label">SURVIVAL</div><div id="go-time" class="stat-value cyber-glow-cyan">0:00</div></div>
+        </div>
+        <div id="go-rewards-summary" class="rewards-summary">Calculating rewards…</div>
+        <div id="go-new-record" class="new-record-banner hidden">New personal best</div>
+        <div class="action-row">
+          <button id="btn-restart" class="cyber-btn primary-btn"><span class="btn-text">Run again</span></button>
+          <button id="btn-menu" class="cyber-btn secondary-btn"><span class="btn-text">Main menu</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PAUSE ================= -->
+    <div id="screen-pause" class="ui-screen hidden">
+      <div class="cyber-card pause-card">
+        <h2 class="pause-title">Paused</h2>
+        <div class="pause-menu-items">
+          <button id="btn-resume" class="cyber-btn primary-btn">Resume</button>
+          <button id="btn-pause-restart" class="cyber-btn secondary-btn">Restart run</button>
+          <button id="btn-pause-settings" class="cyber-btn secondary-btn">Settings</button>
+          <button id="btn-pause-menu" class="cyber-btn secondary-btn">Quit to menu</button>
+        </div>
+        <p class="panel-sub">Quitting ends the run without rewards.</p>
+      </div>
+    </div>
+
+    <!-- ================= ARMORY ================= -->
+    <div id="screen-armory" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Armory</h2><span class="shard-chip" data-shards>0 shards</span><button class="panel-close" data-close>Back</button></div>
+        <div class="armory-layout">
+          <div class="armory-preview">
+            <canvas id="skin-preview" width="260" height="260" aria-label="Skin preview"></canvas>
+            <div id="skin-preview-name" class="skin-preview-name">CHRONO OPERATIVE</div>
+            <div id="skin-preview-sub" class="skin-preview-sub"></div>
+          </div>
+          <div id="skin-list" class="skin-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SKILL TREE ================= -->
+    <div id="screen-skills" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Skill tree</h2><span class="shard-chip" data-shards>0 shards</span><button class="panel-close" data-close>Back</button></div>
+        <p class="panel-sub">Permanent upgrades apply to every run. Earn shards by finishing runs and unlocking achievements.</p>
+        <div id="skill-grid" class="skill-grid"></div>
+      </div>
+    </div>
+
+    <!-- ================= ACHIEVEMENTS ================= -->
+    <div id="screen-achievements" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Achievements</h2><span id="ach-count" class="shard-chip">0 / 0</span><button class="panel-close" data-close>Back</button></div>
+        <div id="ach-grid" class="ach-grid"></div>
+      </div>
+    </div>
+
+    <!-- ================= LEADERBOARD ================= -->
+    <div id="screen-leaderboard" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Leaderboard</h2><button class="panel-close" data-close>Back</button></div>
+        <div class="tab-row" role="tablist">
+          <button class="tab active" data-lb-mode="endless" data-lb-sort="score">Best score</button>
+          <button class="tab" data-lb-mode="endless" data-lb-sort="wave">Highest wave</button>
+          <button class="tab" data-lb-mode="endless" data-lb-sort="survivalTime">Longest survival</button>
+          <button class="tab" data-lb-mode="daily" data-lb-sort="score">Today's daily</button>
+        </div>
+        <div id="lb-body" class="lb-body"><div class="lb-state">Loading…</div></div>
+        <div class="lb-pager">
+          <button id="lb-prev" class="cyber-btn secondary-btn small">Previous</button>
+          <span id="lb-page">Page 1</span>
+          <button id="lb-next" class="cyber-btn secondary-btn small">Next</button>
+        </div>
+        <p class="panel-sub small">Scores are checked server-side for plausibility (wave pace, score ceiling per kill). This is not full anti-cheat.</p>
+      </div>
+    </div>
+
+    <!-- ================= PROFILE ================= -->
+    <div id="screen-profile" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Profile</h2><button class="panel-close" data-close>Back</button></div>
+        <div class="profile-layout">
+          <div>
+            <label class="field"><span>Callsign</span><input id="profile-name" maxlength="24"></label>
+            <button id="btn-save-name" class="cyber-btn secondary-btn small">Save name</button>
+            <div id="profile-stats" class="profile-stats"></div>
+          </div>
+          <div class="account-box">
+            <h3 class="sub-title">Cloud account</h3>
+            <p id="account-status" class="panel-sub">Playing as guest. Progress is saved on this device only.</p>
+            <div id="account-forms">
+              <label class="field"><span>Username</span><input id="auth-user" maxlength="20" autocomplete="username"></label>
+              <label class="field"><span>Password</span><input id="auth-pass" type="password" maxlength="128" autocomplete="current-password"></label>
+              <div class="action-row left">
+                <button id="btn-login" class="cyber-btn primary-btn small">Sign in</button>
+                <button id="btn-register" class="cyber-btn secondary-btn small">Create account</button>
+              </div>
+              <p class="panel-sub small">Creating an account uploads your guest progress. Password recovery is not available — keep your password safe.</p>
+            </div>
+            <button id="btn-logout" class="cyber-btn secondary-btn small hidden">Sign out</button>
+            <div id="auth-error" class="form-error" role="alert"></div>
+            <h3 class="sub-title">Recent runs</h3>
+            <div id="run-history" class="run-history"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SETTINGS ================= -->
+    <div id="screen-settings" class="ui-screen hidden panel-screen">
+      <div class="cyber-card panel-card wide">
+        <div class="panel-head"><h2 class="panel-title">Settings</h2><button class="panel-close" data-close>Back</button></div>
+        <div class="settings-layout">
+          <section>
+            <h3 class="sub-title">Audio</h3>
+            <label class="slider"><span>Master</span><input type="range" id="set-master" min="0" max="1" step="0.05"></label>
+            <label class="slider"><span>Music</span><input type="range" id="set-music" min="0" max="1" step="0.05"></label>
+            <label class="slider"><span>Effects</span><input type="range" id="set-sfx" min="0" max="1" step="0.05"></label>
+            <label class="toggle"><input type="checkbox" id="set-muted"><span>Mute all</span></label>
+          </section>
+          <section>
+            <h3 class="sub-title">Display & accessibility</h3>
+            <label class="toggle"><input type="checkbox" id="set-reduced"><span>Reduced motion (less shake & flashing)</span></label>
+            <label class="toggle"><input type="checkbox" id="set-contrast"><span>High-contrast HUD</span></label>
+            <label class="toggle"><input type="checkbox" id="set-crt"><span>CRT scanlines</span></label>
+            <label class="toggle"><input type="checkbox" id="set-aim"><span>Pulse aim assist</span></label>
+            <label class="select"><span>Touch controls</span>
+              <select id="set-touch"><option value="auto">Auto-detect</option><option value="on">Always on</option><option value="off">Off</option></select>
+            </label>
+            <button id="btn-fullscreen" class="cyber-btn secondary-btn small">Toggle fullscreen</button>
+          </section>
+          <section>
+            <h3 class="sub-title">Keyboard controls</h3>
+            <div id="keybind-list" class="keybind-list"></div>
+            <button id="btn-reset-keys" class="cyber-btn secondary-btn small">Reset to defaults</button>
+            <p class="panel-sub small">Arrow keys always move. Hold left mouse to dilate time, release to slash. Right mouse also fires EMP. Esc pauses.</p>
+          </section>
+          <section>
+            <h3 class="sub-title">Training & data</h3>
+            <button id="btn-replay-tutorial" class="cyber-btn secondary-btn small">Replay training</button>
+            <button id="btn-export-save" class="cyber-btn secondary-btn small">Export save</button>
+            <button id="btn-reset-save" class="cyber-btn secondary-btn small danger">Reset local progress</button>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="floating-toolbar">
+      <button id="btn-sound-toggle" class="tool-btn" title="Mute / unmute" aria-label="Toggle sound"><span id="sound-icon">🔊</span></button>
+      <button id="btn-fullscreen-toggle" class="tool-btn" title="Fullscreen" aria-label="Toggle fullscreen"><span>⛶</span></button>
+    </div>
+  </div>
+
+  <script src="js/progression.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
+  <script src="js/particles.js"></script>
+  <script src="js/upgrades.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/three-arena.js" defer></script>
+</body>
+</html>

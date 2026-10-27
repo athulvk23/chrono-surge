@@ -1,0 +1,8 @@
+node_modules/
+data/*.json
+data/*.bak
+tests/test_db.json
+.env
+.DS_Store
+Thumbs.db
+*.log

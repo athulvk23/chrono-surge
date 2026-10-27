@@ -1,0 +1,13 @@
+{
+  "name": "chrono-surge",
+  "version": "1.0.0",
+  "description": "Chrono Surge: Overdrive - Ultra-Responsive Kinetic Vector Slasher with Time Dilation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": ["game", "cyberpunk", "arcade", "roguelite", "kinetic"],
+  "author": "Antigravity Game Studios",
+  "license": "MIT"
+}
