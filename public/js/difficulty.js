@@ -91,24 +91,25 @@
 
       // Concurrent enemy cap on screen (prevents mobile slowdown and impossible wall-of-flesh)
       concurrentEnemyLimit: (w, isMobile = false) => {
-        const mobPenalty = isMobile ? 4 : 0;
-        if (w <= 2) return Math.max(3, 5 - mobPenalty);
-        if (w <= 5) return Math.max(5, 8 - mobPenalty);
-        if (w <= 10) return Math.max(8, 13 - mobPenalty);
-        if (w <= 20) return Math.max(12, 19 - mobPenalty);
-        return Math.max(16, Math.min(isMobile ? 18 : 24, 19 + Math.floor((w - 20) * 0.15)));
+        const mobPenalty = isMobile ? 2 : 0;
+        if (w <= 2) return Math.max(3, 4 - mobPenalty);
+        if (w <= 4) return Math.max(4, 5 - mobPenalty);
+        if (w === 5) return Math.max(4, 6 - mobPenalty); // 6 desktop, 4 mobile
+        if (w <= 10) return Math.max(6, 10 - mobPenalty);
+        if (w <= 20) return Math.max(10, 16 - mobPenalty);
+        return Math.max(14, Math.min(isMobile ? 16 : 22, 17 + Math.floor((w - 20) * 0.15)));
       },
 
       // Total enemies to spawn per wave
       totalWaveEnemies: (w) => {
         if (w === 1) return 4;   // Welcoming: 4 basic drones
         if (w === 2) return 6;   // 6 basic drones
-        if (w === 3) return 9;   // 9 hunters
-        if (w === 4) return 11;  // 8 hunters + 3 orbiters
-        if (w === 5) return 13;  // 8 hunters + 5 orbiters
+        if (w === 3) return 8;   // 8 hunters
+        if (w === 4) return 9;   // 7 hunters + 2 orbiters
+        if (w === 5) return 11;  // 8 hunters + 3 orbiters (fair early milestone)
         if (w <= 10) {
           if (w === 10) return 1; // Boss wave
-          return 13 + (w - 5) * 2;
+          return 12 + (w - 5) * 2;
         }
         if (w % 10 === 0) return 1; // Boss wave
         return Math.min(38, 21 + Math.floor((w - 10) * 0.65));
@@ -229,10 +230,10 @@
         return { hunter: 1.0 };
       }
       if (wave === 4) {
-        return { hunter: 0.75, orbiter: 0.25 };
+        return { hunter: 0.80, orbiter: 0.20 };
       }
       if (wave === 5) {
-        return { hunter: 0.60, orbiter: 0.40 };
+        return { hunter: 0.72, orbiter: 0.28 };
       }
       if (wave === 6) {
         return { hunter: 0.50, orbiter: 0.30, dasher: 0.20 };
@@ -308,11 +309,11 @@
         initialSpawnCount = 3;
         spawnInterval = 2.0;
       } else if (wave <= 5) {
-        initialSpawnCount = Math.min(concurrentCap, 4);
-        spawnInterval = 1.6;
+        initialSpawnCount = Math.min(concurrentCap, 3);
+        spawnInterval = 1.8;
       } else if (wave <= 10) {
-        initialSpawnCount = Math.min(concurrentCap, 6);
-        spawnInterval = 1.35;
+        initialSpawnCount = Math.min(concurrentCap, 5);
+        spawnInterval = 1.4;
       } else {
         initialSpawnCount = Math.min(concurrentCap, 8);
         spawnInterval = Math.max(0.85, 1.35 - Math.min(0.55, (wave - 10) * 0.02));

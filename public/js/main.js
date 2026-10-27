@@ -193,21 +193,45 @@ window.addEventListener('DOMContentLoaded', () => {
     btnResume.addEventListener('click', () => {
       pauseScreen.classList.remove('active');
       pauseScreen.classList.add('hidden');
+      game.lastTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       game.state = 'PLAYING';
       updateTouchControlsVisibility();
+    });
+  }
+
+  const btnPauseRestart = document.getElementById('btn-pause-restart');
+  if (btnPauseRestart) {
+    btnPauseRestart.addEventListener('click', () => {
+      if (confirm('Restart current run? Unsaved progress will be lost.')) {
+        pauseScreen.classList.remove('active');
+        pauseScreen.classList.add('hidden');
+        game.startRun(game.gameMode, game.dailyConfig);
+        updateTouchControlsVisibility();
+      }
+    });
+  }
+
+  const btnPauseSettings = document.getElementById('btn-pause-settings');
+  if (btnPauseSettings) {
+    btnPauseSettings.addEventListener('click', () => {
+      if (window.UI) {
+        window.UI.openPanel('screen-settings', 'screen-pause');
+      }
     });
   }
 
   const btnPauseMenu = document.getElementById('btn-pause-menu');
   if (btnPauseMenu) {
     btnPauseMenu.addEventListener('click', () => {
-      pauseScreen.classList.remove('active');
-      pauseScreen.classList.add('hidden');
-      titleScreen.classList.remove('hidden');
-      titleScreen.classList.add('active');
-      game.returnToTitle();
-      updateTouchControlsVisibility();
-      if (window.refreshAllMetaUI) window.refreshAllMetaUI();
+      if (confirm('Abandon current run and return to title?')) {
+        pauseScreen.classList.remove('active');
+        pauseScreen.classList.add('hidden');
+        titleScreen.classList.remove('hidden');
+        titleScreen.classList.add('active');
+        game.returnToTitle();
+        updateTouchControlsVisibility();
+        if (window.refreshAllMetaUI) window.refreshAllMetaUI();
+      }
     });
   }
 
@@ -541,10 +565,30 @@ window.addEventListener('DOMContentLoaded', () => {
       emp: 'Space', overdrive: 'KeyF', fire: 'KeyE', parry: 'KeyQ'
     };
 
-    // Enter to start from title or briefing
+    // Enter to confirm / start / advance
     if (e.code === 'Enter') {
-      if (game.state === 'TITLE') btnStart?.click();
-      else if (game.state === 'BRIEFING') btnDeploy?.click();
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'BUTTON');
+      if (!isInput) {
+        if (game.state === 'TITLE') {
+          const anyPanel = document.querySelector('.panel-screen.active, #screen-onboarding.active');
+          if (!anyPanel) btnStart?.click();
+        } else if (game.state === 'BRIEFING') {
+          btnDeploy?.click();
+        } else if (game.state === 'PAUSED') {
+          btnResume?.click();
+        } else if (game.state === 'GAMEOVER') {
+          btnRestart?.click();
+        } else if (game.state === 'UPGRADE_SELECT') {
+          const focusedCard = document.activeElement?.closest?.('.upgrade-card');
+          if (focusedCard) {
+            focusedCard.click();
+          } else {
+            const firstCard = document.querySelector('#cards-container .upgrade-card');
+            firstCard?.click();
+          }
+        }
+      }
     }
 
     // Primary fire action
@@ -564,21 +608,84 @@ window.addEventListener('DOMContentLoaded', () => {
       btnRestart?.click();
     }
 
-    // Overdrive ultimate action
-    if ((e.code === binds.overdrive || e.code === 'KeyF' || e.code === 'KeyQ') && game.state === 'PLAYING') {
+    // Overdrive ultimate action (KeyF or binds.overdrive)
+    if ((e.code === binds.overdrive || e.code === 'KeyF') && game.state === 'PLAYING') {
       game.triggerOverdrive();
     }
 
-    // Escape for Pause
+    // Escape Navigation Stack across all screens and modals
     if (e.code === 'Escape') {
+      e.preventDefault();
+
+      // 1. If keybinding capture is active, cancel it
+      if (window.UI && typeof window.UI.isCapturingKey === 'function' && window.UI.isCapturingKey()) {
+        window.UI.cancelKeyCapture();
+        return;
+      }
+
+      // 2. If any secondary panel is active, return to parent screen
+      const activePanel = document.querySelector('.panel-screen.active, #screen-onboarding.active');
+      if (activePanel) {
+        if (window.UI) {
+          window.UI.closePanel(activePanel.id);
+        } else {
+          activePanel.classList.remove('active');
+          activePanel.classList.add('hidden');
+        }
+        return;
+      }
+
+      // 3. If pause screen is active, resume gameplay
+      if (game.state === 'PAUSED' || !pauseScreen.classList.contains('hidden')) {
+        btnResume?.click();
+        return;
+      }
+
+      // 4. During active combat, pause gameplay
       if (game.state === 'PLAYING') {
         game.state = 'PAUSED';
         pauseScreen.classList.remove('hidden');
         pauseScreen.classList.add('active');
         updateTouchControlsVisibility();
-      } else if (game.state === 'PAUSED') {
-        btnResume?.click();
+        return;
       }
+
+      // 5. On Game Over screen, return to title
+      if (game.state === 'GAMEOVER') {
+        const btnReturnMenu = document.getElementById('btn-return-menu');
+        if (btnReturnMenu) {
+          btnReturnMenu.click();
+        } else {
+          game.returnToTitle();
+          const goScreen = document.getElementById('screen-gameover');
+          if (goScreen) {
+            goScreen.classList.remove('active');
+            goScreen.classList.add('hidden');
+          }
+          titleScreen.classList.remove('hidden');
+          titleScreen.classList.add('active');
+          updateTouchControlsVisibility();
+          if (window.refreshAllMetaUI) window.refreshAllMetaUI();
+        }
+        return;
+      }
+
+      // 6. On Briefing screen, cancel back to title
+      if (game.state === 'BRIEFING') {
+        game.returnToTitle();
+        briefingScreen.classList.remove('active');
+        briefingScreen.classList.add('hidden');
+        titleScreen.classList.remove('hidden');
+        titleScreen.classList.add('active');
+        return;
+      }
+
+      // 7. On mandatory upgrade screen, do NOT bypass or corrupt run
+      if (game.state === 'UPGRADE_SELECT') {
+        return;
+      }
+
+      // 8. On title screen, Escape does nothing (do not close/reset)
     }
   });
 

@@ -353,3 +353,158 @@ test('Roguelite Run Upgrades: Meaningful choices, hard caps & no infinite loops'
   assert.strictEqual(player.sliceDamage, preDmg * 1.45, 'Slice damage increased by 45%');
   assert.strictEqual(player.maxShield, Math.round(preShield * 0.75), 'Max shield reduced by 25%');
 });
+
+test('Permanent Workshop Upgrades: Every branch modifies real PlayerVessel statistics', () => {
+  const { PlayerVessel } = require('../public/js/entities.js');
+  const { ProgressionSystem, SKILL_TREE_BRANCHES } = require('../public/js/progression.js');
+
+  const baseVessel = new PlayerVessel(100, 100, 'vanguard', {
+    chrono_mastery: 0, offensive_systems: 0, defensive_systems: 0,
+    mobility_thrusters: 0, energy_efficiency: 0, overdrive_catalyst: 0
+  });
+
+  const upgradedVessel = new PlayerVessel(100, 100, 'vanguard', {
+    chrono_mastery: 2, offensive_systems: 2, defensive_systems: 2,
+    mobility_thrusters: 2, energy_efficiency: 2, overdrive_catalyst: 2
+  });
+
+  // 1. Chrono Mastery: +8% max energy/rank, +10% regen/rank, -5% drain/rank
+  assert.ok(upgradedVessel.maxChronoEnergy > baseVessel.maxChronoEnergy, 'Max energy must increase');
+  assert.ok(upgradedVessel.chronoRechargeRate > baseVessel.chronoRechargeRate, 'Recharge rate must increase');
+  assert.ok(upgradedVessel.chronoDrainRate < baseVessel.chronoDrainRate, 'Drain rate must decrease');
+
+  // 2. Offensive Systems: +5% ability damage/rank, +2% crit/rank
+  assert.ok(upgradedVessel.sliceDamage > baseVessel.sliceDamage, 'Slice damage must increase');
+  assert.ok(upgradedVessel.primaryDamage > baseVessel.primaryDamage, 'Primary pulse damage must increase');
+  assert.ok(upgradedVessel.critChance > baseVessel.critChance, 'Crit chance must increase');
+
+  // 3. Defensive Systems: +10 Hull/rank, +8% Shield/rank, +12% regen/rank, -8% delay/rank
+  assert.strictEqual(upgradedVessel.maxHp, baseVessel.maxHp + 20, 'Hull health must increase by 20 at rank 2');
+  assert.ok(upgradedVessel.maxShield > baseVessel.maxShield, 'Shield capacity must increase');
+  assert.ok(upgradedVessel.shieldRechargeRate > baseVessel.shieldRechargeRate, 'Shield recharge must increase');
+  assert.ok(upgradedVessel.shieldRechargeDelay < baseVessel.shieldRechargeDelay, 'Shield recharge delay must decrease');
+
+  // 4. Mobility Thrusters: +3% speed/rank, +4% dash range/rank
+  assert.ok(upgradedVessel.baseSpeed > baseVessel.baseSpeed, 'Movement speed must increase');
+  assert.ok(upgradedVessel.dashRangeMultiplier > baseVessel.dashRangeMultiplier, 'Dash range must increase');
+
+  // 5. EMP Capacitors: reduced energy cost, +5% radius/rank, +10% recharge/rank
+  assert.ok(upgradedVessel.empCost < baseVessel.empCost, 'EMP energy cost must decrease');
+  assert.ok(upgradedVessel.empRadius > baseVessel.empRadius, 'EMP radius must expand');
+  assert.ok(upgradedVessel.empRechargeRate > baseVessel.empRechargeRate, 'EMP recharge must increase');
+
+  // 6. Overdrive Catalyst: +8% charge gain/rank, +0.3s duration/rank
+  assert.ok(upgradedVessel.overdriveGainMult > baseVessel.overdriveGainMult, 'Overdrive charge gain must increase');
+  assert.ok(upgradedVessel.overdriveDuration > baseVessel.overdriveDuration, 'Overdrive duration must extend');
+
+  // 7. Progression System purchase validation: exactly-once deduction & prerequisite checks
+  const prog = new ProgressionSystem();
+  prog.profile.shards = 100;
+  prog.profile.skillTree = { chrono_mastery: 0, offensive_systems: 0, defensive_systems: 0, mobility_thrusters: 0 };
+
+  // Mobility requires chrono_mastery rank 1
+  const lockedBuy = prog.purchaseSkill('mobility_thrusters');
+  assert.strictEqual(lockedBuy.ok, false, 'Cannot buy mobility without prerequisite');
+  assert.strictEqual(prog.profile.shards, 100, 'Shards must not be deducted on failed purchase');
+
+  // Purchase chrono_mastery (cost 50)
+  const validBuy = prog.purchaseSkill('chrono_mastery');
+  assert.strictEqual(validBuy.ok, true, 'Valid purchase must succeed');
+  assert.strictEqual(prog.profile.shards, 50, 'Exactly 50 shards deducted once');
+  assert.strictEqual(prog.profile.skillTree.chrono_mastery, 1, 'Rank incremented to 1');
+
+  // Now mobility prerequisite is met
+  const unlockedBuy = prog.purchaseSkill('mobility_thrusters'); // cost 60, but only 50 shards remain
+  assert.strictEqual(unlockedBuy.ok, false, 'Rejected due to insufficient shards');
+  assert.strictEqual(prog.profile.shards, 50, 'Shards remain unchanged on insufficient funds');
+});
+
+test('In-Run Augments Combat Effects: Nanite Aegis, Rewind, and Card Pool verified', () => {
+  const { AUGMENT_DEFINITIONS, AugmentManager } = require('../public/js/upgrades.js');
+  const { PlayerVessel } = require('../public/js/entities.js');
+
+  const player = new PlayerVessel(100, 100);
+  const naniteAegis = AUGMENT_DEFINITIONS.find(a => a.id === 'nanite_aegis');
+  const rewindDef = AUGMENT_DEFINITIONS.find(a => a.id === 'chrono_rewind');
+
+  // 1. Nanite Aegis: modifies Shield, NOT Hull
+  const initialHp = player.hp;
+  const initialShield = player.maxShield;
+  naniteAegis.apply(player);
+  assert.strictEqual(player.hp, initialHp, 'Nanite Aegis must NOT alter Hull HP');
+  assert.ok(player.maxShield > initialShield, 'Nanite Aegis must increase maxShield by 25%');
+
+  // 2. Temporal Rewind: saves player from lethal hit
+  rewindDef.apply(player);
+  assert.strictEqual(player.augments.hasRewind, true, 'Rewind augment active');
+  assert.strictEqual(player.augments.rewindAvailable, true, 'Rewind available for use');
+
+  player.hp = 10;
+  player.shield = 0;
+  const dead = player.takeDamage(50); // lethal damage
+  assert.strictEqual(dead, false, 'Rewind must prevent death');
+  assert.strictEqual(player.augments.rewindAvailable, false, 'Rewind consumed after use');
+  assert.ok(player.hp > 0, 'HP restored to 50%');
+  assert.ok(player.shield > 0, 'Shield restored');
+
+  // 3. Augment Manager: No duplicate cards in a single 3-card draw
+  const manager = new AugmentManager();
+  manager.reset();
+  const cards = manager.getRandomCards(3);
+  assert.strictEqual(cards.length, 3, 'Must draw 3 cards');
+  const ids = new Set(cards.map(c => c.id));
+  assert.strictEqual(ids.size, 3, 'Selection set must contain 3 distinct augments with no duplicates');
+  assert.strictEqual(manager.rerollsRemaining, 1, 'Initial reroll charge is 1');
+});
+
+test('Core Resource Simulation: Clamping, Zero Negative HP, and Shield Priority', () => {
+  const { PlayerVessel } = require('../public/js/entities.js');
+  const player = new PlayerVessel(100, 100);
+
+  // 1. Shield absorbs before Hull
+  player.hp = 100;
+  player.shield = 50;
+  player.takeDamage(30);
+  assert.strictEqual(player.shield, 20, 'Shield absorbed all 30 damage');
+  assert.strictEqual(player.hp, 100, 'Hull HP untouched while shield is active');
+
+  // 2. Shield overflow penetrates to Hull
+  player.invulnerableTimer = 0;
+  player.takeDamage(40); // 20 absorbed by shield, 20 penetrates to Hull
+  assert.strictEqual(player.shield, 0, 'Shield fully depleted');
+  assert.strictEqual(player.hp, 80, 'Remaining 20 damage applied to Hull');
+
+  // 3. Massive overkill damage never produces negative HP
+  player.invulnerableTimer = 0;
+  player.takeDamage(9999);
+  assert.strictEqual(player.hp, 0, 'HP must be clamped strictly to 0, never negative');
+
+  // 4. Chrono energy clamp
+  player.chronoEnergy = 50;
+  player.addEnergy(999);
+  assert.strictEqual(player.chronoEnergy, player.maxChronoEnergy, 'Energy cannot exceed maxChronoEnergy');
+  player.consumeEnergy(999);
+  assert.strictEqual(player.chronoEnergy, player.maxChronoEnergy, 'Over-budget consumption rejected cleanly');
+});
+
+test('Early-Game Pacing & Wave 5 Difficulty Calibration', () => {
+  const DifficultyDirector = require('../public/js/difficulty.js');
+  const { Enemy } = require('../public/js/entities.js');
+
+  // 1. Wave 5 Total Enemies and Concurrent Limit
+  const w5Config = DifficultyDirector.getWaveConfig(5, 'endless', null, false);
+  assert.strictEqual(w5Config.totalEnemies, 11, 'Wave 5 total enemies calibrated to 11 for fair pacing');
+  assert.ok(w5Config.concurrentCap <= 6, 'Wave 5 concurrent limit bounded at 6 on desktop');
+
+  const w5Mobile = DifficultyDirector.getWaveConfig(5, 'endless', null, true);
+  assert.ok(w5Mobile.concurrentCap <= 4, 'Wave 5 concurrent limit bounded at 4 on mobile to prevent swarming');
+
+  // 2. Orbiters have expanded telegraph window on early waves
+  const w5Orbiter = new Enemy(100, 100, 'orbiter', 5);
+  assert.ok(w5Orbiter.chargeDuration >= 2.5, 'Orbiter charge duration on Wave 5 must exceed 2.5s for readable telegraph');
+
+  // 3. Archetype Distribution on Wave 5 has controlled orbiter density
+  const dist = DifficultyDirector.getArchetypeDistribution(5);
+  assert.ok(dist.hunter >= 0.70, 'Hunters remain primary archetype (>= 70%) on Wave 5');
+  assert.ok(dist.orbiter <= 0.30, 'Orbiters capped at <= 30% on Wave 5 to prevent bullet wall');
+});

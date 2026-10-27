@@ -761,6 +761,66 @@
   flex: 1;
 }
 
+.skill-rank-badge {
+  font-size: 0.7rem;
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.12);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  letter-spacing: 0.08em;
+}
+
+.skill-values {
+  background: rgba(4, 10, 20, 0.65);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  margin: 4px 0;
+}
+
+.skill-val-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  color: #c4d7ec;
+}
+
+.skill-val-row.next {
+  color: var(--cyan);
+  border-top: 1px dashed rgba(0, 240, 255, 0.15);
+  padding-top: 4px;
+}
+
+.val-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #7b94ad;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.val-num {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: right;
+}
+
+.skill-max-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #00ff66;
+  text-align: center;
+  padding: 4px;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
 .skill-pips {
   display: flex;
   gap: 4px;

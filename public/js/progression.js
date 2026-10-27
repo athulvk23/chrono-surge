@@ -86,8 +86,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 5,
     costs: [50, 100, 180, 300, 450],
     prereq: null,
-    desc: '-7% Time Dilation drain and +8% Chrono recharge speed per rank.',
-    statFormat: (r) => `-${r * 7}% Drain / +${r * 8}% Regen`
+    desc: 'Improve time manipulation and resource efficiency between combat abilities.',
+    currentValue: (r) => r === 0 ? 'Base: 100 max energy, 8.0/s regen, 25.0/s drain' : `${Math.round(100 * (1 + r * 0.08))} max energy, ${(8 * (1 + r * 0.10)).toFixed(1)}/s regen, ${(25 * Math.pow(0.95, r)).toFixed(1)}/s drain`,
+    nextValue: (r) => `${Math.round(100 * (1 + (r + 1) * 0.08))} max energy, ${(8 * (1 + (r + 1) * 0.10)).toFixed(1)}/s regen, ${(25 * Math.pow(0.95, r + 1)).toFixed(1)}/s drain`,
+    statFormat: (r) => `+${r * 8}% Max / +${r * 10}% Regen / -${Math.round((1 - Math.pow(0.95, r)) * 100)}% Drain`
   },
   {
     id: 'offensive_systems',
@@ -97,8 +99,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 5,
     costs: [50, 100, 180, 300, 450],
     prereq: null,
-    desc: '+8% Hyper-Slash & Primary Pulse damage and +4% Critical Strike chance per rank.',
-    statFormat: (r) => `+${r * 8}% Damage / +${r * 4}% Crit`
+    desc: 'Improve ability damage output and reward aggressive tactical play.',
+    currentValue: (r) => r === 0 ? 'Base: 130 slice, 36 pulse, 6% crit' : `${Math.round(130 * (1 + r * 0.05))} slice, ${Math.round(36 * (1 + r * 0.05))} pulse, ${Math.min(25, Math.round((0.06 + r * 0.02) * 100))}% crit`,
+    nextValue: (r) => `${Math.round(130 * (1 + (r + 1) * 0.05))} slice, ${Math.round(36 * (1 + (r + 1) * 0.05))} pulse, ${Math.min(25, Math.round((0.06 + (r + 1) * 0.02) * 100))}% crit`,
+    statFormat: (r) => `+${r * 5}% Damage / +${r * 2}% Crit`
   },
   {
     id: 'defensive_systems',
@@ -108,8 +112,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 5,
     costs: [50, 100, 180, 300, 450],
     prereq: null,
-    desc: '+12 Max Shield & +10 Max Hull Health per rank.',
-    statFormat: (r) => `+${r * 12} Shield / +${r * 10} Hull`
+    desc: 'Increase Hull and Shield capacity with faster recharge and lower delay.',
+    currentValue: (r) => r === 0 ? 'Base: 100 Hull, 70 Shield, 11.0/s regen, 2.80s delay' : `${100 + r * 10} Hull, ${Math.round(70 * (1 + r * 0.08))} Shield, ${(11 * (1 + r * 0.12)).toFixed(1)}/s regen, ${Math.max(1.5, 2.8 * Math.pow(0.92, r)).toFixed(2)}s delay`,
+    nextValue: (r) => `${100 + (r + 1) * 10} Hull, ${Math.round(70 * (1 + (r + 1) * 0.08))} Shield, ${(11 * (1 + (r + 1) * 0.12)).toFixed(1)}/s regen, ${Math.max(1.5, 2.8 * Math.pow(0.92, r + 1)).toFixed(2)}s delay`,
+    statFormat: (r) => `+${r * 8}% Shield / +${r * 10} Hull / +${r * 12}% Regen`
   },
   {
     id: 'mobility_thrusters',
@@ -119,8 +125,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 5,
     costs: [60, 120, 200, 320, 500],
     prereq: { id: 'chrono_mastery', rank: 1 },
-    desc: '+6% Movement speed and +7% Hyper-Slash Dash range per rank.',
-    statFormat: (r) => `+${r * 6}% Speed / +${r * 7}% Dash Range`
+    desc: 'Improve vessel movement velocity and Hyper-Slash dash range.',
+    currentValue: (r) => r === 0 ? 'Base: 320 speed, 1.00x dash range' : `${Math.round(320 * (1 + r * 0.03))} speed, ${(1.0 + r * 0.04).toFixed(2)}x dash range`,
+    nextValue: (r) => `${Math.round(320 * (1 + (r + 1) * 0.03))} speed, ${(1.0 + (r + 1) * 0.04).toFixed(2)}x dash range`,
+    statFormat: (r) => `+${r * 3}% Speed / +${r * 4}% Dash Range`
   },
   {
     id: 'energy_efficiency',
@@ -130,8 +138,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 5,
     costs: [60, 120, 200, 320, 500],
     prereq: { id: 'defensive_systems', rank: 1 },
-    desc: '+9% EMP Repulse recharge speed and +6% EMP blast radius per rank.',
-    statFormat: (r) => `+${r * 9}% EMP Regen / +${r * 6}% Radius`
+    desc: 'Reduce EMP energy cost, accelerate recharge, and expand blast radius.',
+    currentValue: (r) => r === 0 ? 'Base: 35 energy cost, 180px radius' : `${Math.max(22, 35 - r * 2.5).toFixed(0)} energy cost, ${Math.round(180 * (1 + r * 0.05))}px radius`,
+    nextValue: (r) => `${Math.max(22, 35 - (r + 1) * 2.5).toFixed(0)} energy cost, ${Math.round(180 * (1 + (r + 1) * 0.05))}px radius`,
+    statFormat: (r) => `-${(r * 2.5).toFixed(0)} Cost / +${r * 5}% Radius`
   },
   {
     id: 'overdrive_catalyst',
@@ -141,8 +151,10 @@ const SKILL_TREE_BRANCHES = [
     maxRank: 3,
     costs: [100, 220, 400],
     prereq: { id: 'offensive_systems', rank: 2 },
-    desc: '+15% Overdrive charge gain and +0.6s Overdrive duration per rank.',
-    statFormat: (r) => `+${r * 15}% Charge / +${(r * 0.6).toFixed(1)}s Duration`
+    desc: 'Accelerate Overdrive charge generation and extend ultimate combat duration.',
+    currentValue: (r) => r === 0 ? 'Base: 1.00x charge rate, 4.5s duration' : `${(1 + r * 0.08).toFixed(2)}x charge rate, ${(4.5 + r * 0.3).toFixed(1)}s duration`,
+    nextValue: (r) => `${(1 + (r + 1) * 0.08).toFixed(2)}x charge rate, ${(4.5 + (r + 1) * 0.3).toFixed(1)}s duration`,
+    statFormat: (r) => `+${r * 8}% Charge / +${(r * 0.3).toFixed(1)}s Duration`
   }
 ];
 
@@ -160,12 +172,13 @@ const ACHIEVEMENTS_CATALOG = [
 
 const SAVE_STORAGE_KEY = 'chrono_surge_beginning_save_v2';
 const SAVE_BACKUP_KEY = 'chrono_surge_beginning_save_v2_bak';
+const safeStorage = (typeof localStorage !== 'undefined' ? localStorage : { _data: {}, getItem(k) { return this._data[k] || null; }, setItem(k, v) { this._data[k] = String(v); }, removeItem(k) { delete this._data[k]; } });
 const AUTH_TOKEN_KEY = 'chrono_surge_beginning_jwt';
 const PENDING_RUNS_KEY = 'chrono_surge_beginning_pending_runs';
 
 class ProgressionSystem {
   constructor() {
-    this.token = localStorage.getItem(AUTH_TOKEN_KEY) || null;
+    this.token = safeStorage.getItem(AUTH_TOKEN_KEY) || null;
     this.user = null;
     this.syncStatus = 'LOCAL'; // 'LOCAL', 'SYNCING', 'SYNCED', 'OFFLINE'
     this.profile = this.loadLocalProfile();
@@ -185,10 +198,10 @@ class ProgressionSystem {
   }
 
   createFreshProfile() {
-    const legacyScore = parseInt(localStorage.getItem('chrono_high_score') || '0', 10);
-    const legacyWave = parseInt(localStorage.getItem('chrono_best_wave') || '0', 10);
-    const legacySlices = parseInt(localStorage.getItem('chrono_total_slices') || '0', 10);
-    const legacyStyle = localStorage.getItem('chrono_max_style') || 'D';
+    const legacyScore = parseInt(safeStorage.getItem('chrono_high_score') || '0', 10);
+    const legacyWave = parseInt(safeStorage.getItem('chrono_best_wave') || '0', 10);
+    const legacySlices = parseInt(safeStorage.getItem('chrono_total_slices') || '0', 10);
+    const legacyStyle = safeStorage.getItem('chrono_max_style') || 'D';
 
     return {
       version: 2,
@@ -247,7 +260,7 @@ class ProgressionSystem {
   loadLocalProfile() {
     for (const key of [SAVE_STORAGE_KEY, SAVE_BACKUP_KEY]) {
       try {
-        const raw = localStorage.getItem(key);
+        const raw = safeStorage.getItem(key);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === 'object') {
@@ -285,18 +298,20 @@ class ProgressionSystem {
   }
 
   saveLocalProfile(profile = this.profile) {
+    if (!profile) return;
     try {
-      this.profile.updatedAt = Date.now();
-      const prev = localStorage.getItem(SAVE_STORAGE_KEY);
+      profile.updatedAt = Date.now();
+      this.profile = profile;
+      const prev = safeStorage.getItem(SAVE_STORAGE_KEY);
       if (prev) {
-        localStorage.setItem(SAVE_BACKUP_KEY, prev);
+        safeStorage.setItem(SAVE_BACKUP_KEY, prev);
       }
-      localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(profile));
+      safeStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(profile));
       // Keep legacy keys updated for compatibility
-      localStorage.setItem('chrono_high_score', String(profile.bestScore || 0));
-      localStorage.setItem('chrono_best_wave', String(profile.highestWave || 0));
-      localStorage.setItem('chrono_total_slices', String(profile.totalSlices || 0));
-      localStorage.setItem('chrono_max_style', String(profile.maxStyleRank || 'D'));
+      safeStorage.setItem('chrono_high_score', String(profile.bestScore || 0));
+      safeStorage.setItem('chrono_best_wave', String(profile.highestWave || 0));
+      safeStorage.setItem('chrono_total_slices', String(profile.totalSlices || 0));
+      safeStorage.setItem('chrono_max_style', String(profile.maxStyleRank || 'D'));
       return true;
     } catch (e) {
       console.error('Local save failed:', e);
@@ -306,7 +321,7 @@ class ProgressionSystem {
 
   loadPendingRuns() {
     try {
-      const raw = localStorage.getItem(PENDING_RUNS_KEY);
+      const raw = safeStorage.getItem(PENDING_RUNS_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch (_) {
       return [];
@@ -315,7 +330,7 @@ class ProgressionSystem {
 
   savePendingRuns() {
     try {
-      localStorage.setItem(PENDING_RUNS_KEY, JSON.stringify(this.pendingRuns.slice(0, 15)));
+      safeStorage.setItem(PENDING_RUNS_KEY, JSON.stringify(this.pendingRuns.slice(0, 15)));
     } catch (_) {}
   }
 
@@ -551,7 +566,7 @@ class ProgressionSystem {
     }
     this.token = data.token;
     this.user = data.user;
-    localStorage.setItem(AUTH_TOKEN_KEY, this.token);
+    safeStorage.setItem(AUTH_TOKEN_KEY, this.token);
     this.profile = this.migrateProfile(data.profile);
     this.saveLocalProfile();
     this.notifyStatus('SYNCED', `Signed in as ${this.user.username}`);
@@ -581,7 +596,7 @@ class ProgressionSystem {
     }
     this.token = data.token;
     this.user = data.user;
-    localStorage.setItem(AUTH_TOKEN_KEY, this.token);
+    safeStorage.setItem(AUTH_TOKEN_KEY, this.token);
     this.profile = this.migrateProfile(data.profile);
     this.saveLocalProfile();
     this.notifyStatus('SYNCED', `Cloud profile restored: ${this.user.username}`);
@@ -619,7 +634,7 @@ class ProgressionSystem {
       username: u.user_metadata?.username || u.email?.split('@')[0] || 'pilot',
       email: u.email
     };
-    localStorage.setItem(AUTH_TOKEN_KEY, this.token);
+    safeStorage.setItem(AUTH_TOKEN_KEY, this.token);
     this.profile.displayName = this.user.username.toUpperCase();
     this.saveLocalProfile();
     this.notifyStatus('SYNCED', `Google authenticated: ${this.user.username}`);
@@ -632,7 +647,7 @@ class ProgressionSystem {
     }
     this.token = null;
     this.user = null;
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+    safeStorage.removeItem(AUTH_TOKEN_KEY);
     this.notifyStatus('LOCAL', 'Signed out (Local Guest Mode Active)');
   }
 
@@ -689,7 +704,18 @@ class ProgressionSystem {
   }
 }
 
-window.SKIN_CATALOG = SKIN_CATALOG;
-window.SKILL_TREE_BRANCHES = SKILL_TREE_BRANCHES;
-window.ACHIEVEMENTS_CATALOG = ACHIEVEMENTS_CATALOG;
-window.progression = new ProgressionSystem();
+if (typeof window !== 'undefined') {
+  window.SKIN_CATALOG = SKIN_CATALOG;
+  window.SKILL_TREE_BRANCHES = SKILL_TREE_BRANCHES;
+  window.ACHIEVEMENTS_CATALOG = ACHIEVEMENTS_CATALOG;
+  window.progression = new ProgressionSystem();
+}
+
+if (typeof module === 'object' && module.exports) {
+  module.exports = {
+    ProgressionSystem,
+    SKILL_TREE_BRANCHES,
+    SKIN_CATALOG,
+    ACHIEVEMENTS_CATALOG
+  };
+}

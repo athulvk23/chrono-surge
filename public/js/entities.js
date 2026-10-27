@@ -22,7 +22,7 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 
 // --- PLAYER VESSEL ---
 class PlayerVessel {
-  constructor(x, y, coreType = 'vanguard') {
+  constructor(x, y, coreType = 'vanguard', customSkills = null) {
     this.x = x;
     this.y = y;
     this.vx = 0;
@@ -31,7 +31,7 @@ class PlayerVessel {
     this.angle = 0;
     this.coreType = coreType;
 
-    const skills = window.progression?.profile?.skillTree || {};
+    const skills = customSkills || (typeof window !== 'undefined' && window.progression?.profile?.skillTree) || {};
     const chronoRank = skills.chrono_mastery || 0;
     const offRank = skills.offensive_systems || 0;
     const defRank = skills.defensive_systems || 0;
@@ -39,27 +39,27 @@ class PlayerVessel {
     const empRank = skills.energy_efficiency || 0;
     const odRank = skills.overdrive_catalyst || 0;
 
-    // Core statistics + Permanent Skill Tree bonuses
+    // Core statistics + Permanent Skill Tree bonuses (Phase 2 & 4 calibrated)
     this.maxHp = 100 + defRank * 10;
     this.hp = this.maxHp;
-    this.maxShield = 70 + defRank * 12;
+    this.maxShield = Math.round(70 * (1 + defRank * 0.08));
     this.shield = this.maxShield;
-    this.shieldRechargeRate = 11 + defRank * 0.8;
+    this.shieldRechargeRate = 11 * (1 + defRank * 0.12);
     this.baseShieldRegenRate = this.shieldRechargeRate;
-    this.shieldRechargeDelay = 2.8;
+    this.shieldRechargeDelay = Math.max(1.5, 2.8 * Math.pow(0.92, defRank));
     this.shieldRechargeTimer = 0;
 
-    this.maxChronoEnergy = 100;
-    this.chronoEnergy = 100;
-    this.chronoDrainRate = 25 * Math.pow(0.92, chronoRank); // Phase 2: 25 energy/sec default
-    this.chronoRechargeRate = 8 * (1 + chronoRank * 0.10);  // Phase 2: 8 energy/sec default
+    this.maxChronoEnergy = Math.round(100 * (1 + chronoRank * 0.08));
+    this.chronoEnergy = this.maxChronoEnergy;
+    this.chronoDrainRate = 25 * Math.pow(0.95, chronoRank); // 25 energy/sec default, -5% per rank
+    this.chronoRechargeRate = 8 * (1 + chronoRank * 0.10);  // 8 energy/sec default, +10% per rank
     this.baseChronoRechargeRate = this.chronoRechargeRate;
-    this.energyRegenDelay = 1.0;                            // Phase 2: 1.0s delay after expenditure
+    this.energyRegenDelay = Math.max(0.6, 1.0 - chronoRank * 0.06);
     this.energyRegenTimer = 0;
 
     // Ability Energy Costs
     this.hyperSlashCost = 20;                               // 20 energy
-    this.empCost = 35;                                      // 35 energy
+    this.empCost = Math.max(22, 35 - empRank * 2.5);        // 35 energy, -2.5 per rank
     this.parryCost = 15;                                    // 15 energy on successful reflection
     this.parrySkillBonus = 5;                               // 5 energy refund on success (Net: 10)
 
@@ -74,24 +74,26 @@ class PlayerVessel {
 
     this.maxEmp = 100;
     this.empCharge = 100;
-    this.empRadius = 180 * (1 + empRank * 0.06);
+    this.empRadius = 180 * (1 + empRank * 0.05);
+    this.empRechargeRate = 12 * (1 + empRank * 0.10);
+    this.baseEmpRechargeRate = this.empRechargeRate;
 
     // Chrono Overdrive Ultimate
     this.maxOverdrive = 100;
     this.overdriveCharge = 0;
-    this.overdriveGainMult = 1 + odRank * 0.15;
+    this.overdriveGainMult = 1 + odRank * 0.08;
     this.isOverdrive = false;
     this.overdriveTimer = 0;
-    this.overdriveDuration = 4.5 + odRank * 0.6;
+    this.overdriveDuration = 4.5 + odRank * 0.3;
 
     // Movement, Primary Pulse & Dash physics
-    this.baseSpeed = 320 * (1 + mobRank * 0.06);
+    this.baseSpeed = 320 * (1 + mobRank * 0.03);
     this.sliceWidth = 28;
-    this.sliceDamage = 130 * (1 + offRank * 0.08);
+    this.sliceDamage = 130 * (1 + offRank * 0.05);
     this.baseSliceDamage = this.sliceDamage;
-    this.primaryDamage = 36 * (1 + offRank * 0.08);
-    this.critChance = 0.06 + offRank * 0.04;
-    this.dashRangeMultiplier = 1.0 + mobRank * 0.07;
+    this.primaryDamage = 36 * (1 + offRank * 0.05);
+    this.critChance = Math.min(0.25, 0.06 + offRank * 0.02);
+    this.dashRangeMultiplier = 1.0 + mobRank * 0.04;
 
     // Primary weapon pulse cooldown
     this.fireCooldown = 0;
@@ -348,10 +350,15 @@ class PlayerVessel {
     }
     this.shieldRechargeTimer = this.shieldRechargeDelay;
     if (remaining > 0) this.hp -= remaining;
+    this.hp = Math.max(0, this.hp);
 
     this.invulnerableTimer = 0.6;
-    window.chronoAudio.playPlayerHit();
-    window.particles.addTrauma(0.5);
+    if (window.chronoAudio && typeof window.chronoAudio.playPlayerHit === 'function') {
+      window.chronoAudio.playPlayerHit();
+    }
+    if (window.particles && typeof window.particles.addTrauma === 'function') {
+      window.particles.addTrauma(0.5);
+    }
 
     if (this.hp <= 0 && this.augments.hasRewind && this.augments.rewindAvailable) {
       this.augments.rewindAvailable = false;
@@ -359,8 +366,10 @@ class PlayerVessel {
       this.shield = this.maxShield * 0.35;
       this.shieldRechargeTimer = this.shieldRechargeDelay;
       this.invulnerableTimer = 2.5;
-      window.particles.addShockwave(this.x, this.y, 250, '#ffe600', 35);
-      window.particles.addFloatingText(this.x, this.y, 'TEMPORAL REWIND!', '#ffe600', 22, true);
+      if (window.particles && typeof window.particles.addShockwave === 'function') {
+        window.particles.addShockwave(this.x, this.y, 250, '#ffe600', 35);
+        window.particles.addFloatingText(this.x, this.y, 'TEMPORAL REWIND!', '#ffe600', 22, true);
+      }
       return false;
     }
 
@@ -646,7 +655,7 @@ class Enemy {
         this.color = '#ffe600';
         this.scoreVal = 200;
         this.chargeTimer = 0;
-        this.chargeDuration = 2.2;
+        this.chargeDuration = Math.max(2.2, 3.0 - wave * 0.08);
         this.isTelegraphing = false;
         break;
 

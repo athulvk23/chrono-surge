@@ -140,8 +140,9 @@ const AUGMENT_DEFINITIONS = [
     desc: 'Instantly repairs 40% shield and permanently increases maximum shield capacity by 25%.',
     maxTier: 4,
     apply: (player) => {
-      player.maxHp *= 1.25;
-      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.4);
+      player.maxShield = Math.round(player.maxShield * 1.25);
+      player.shield = Math.min(player.maxShield, player.shield + player.maxShield * 0.4);
+      player.augments.naniteAegis = (player.augments.naniteAegis || 0) + 1;
     }
   },
   {

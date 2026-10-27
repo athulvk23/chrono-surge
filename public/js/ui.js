@@ -44,6 +44,13 @@
       if (id === 'screen-leaderboard') loadLeaderboard();
       if (id === 'screen-profile') renderProfile();
       if (id === 'screen-settings') renderSettings();
+    },
+    isCapturingKey() {
+      return !!capturingAction;
+    },
+    cancelKeyCapture() {
+      capturingAction = null;
+      renderSettings();
     }
   };
   window.UI = UI;
@@ -200,11 +207,22 @@
       const node = document.createElement('div');
       node.className = `skill-node${maxed ? ' maxed' : ''}${locked ? ' locked' : ''}`;
       const pips = Array.from({ length: b.maxRank }, (_, i) => `<span class="pip${i < rank ? ' on' : ''}"></span>`).join('');
+      const curVal = typeof b.currentValue === 'function' ? b.currentValue(rank) : (rank > 0 ? b.statFormat(rank) : 'Not learned');
+      const nextVal = typeof b.nextValue === 'function' ? b.nextValue(rank) : b.statFormat(rank + 1);
       node.innerHTML = `
-        <div class="skill-top"><span class="skill-icon">${b.icon}</span><div><div class="skill-branch">${esc(b.branch)}</div><div class="skill-name">${esc(b.name)}</div></div></div>
+        <div class="skill-top">
+          <span class="skill-icon">${b.icon}</span>
+          <div>
+            <div class="skill-branch">${esc(b.branch)}</div>
+            <div class="skill-name">${esc(b.name)} <span class="skill-rank-badge">RANK ${rank}/${b.maxRank}</span></div>
+          </div>
+        </div>
         <p class="skill-desc">${esc(b.desc)}</p>
+        <div class="skill-values">
+          <div class="skill-val-row"><span class="val-label">Current:</span> <span class="val-num">${esc(curVal)}</span></div>
+          ${!maxed ? `<div class="skill-val-row next"><span class="val-label">Next Rank:</span> <span class="val-num">${esc(nextVal)}</span></div>` : '<div class="skill-max-badge">MAXED OUT</div>'}
+        </div>
         <div class="skill-pips" aria-label="Rank ${rank} of ${b.maxRank}">${pips}</div>
-        <div class="skill-stat">${rank > 0 ? 'Now: ' + esc(b.statFormat(rank)) : 'Not learned'}</div>
         <button class="cyber-btn small ${locked || maxed ? 'secondary-btn' : 'primary-btn'}" ${locked || maxed || p.shards < cost ? 'disabled' : ''}>
           ${maxed ? 'Maxed' : locked ? lockText : `Upgrade · ${cost} shards`}
         </button>`;

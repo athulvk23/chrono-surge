@@ -525,16 +525,21 @@ class ChronoGame {
   }
 
   spawnAtEdge() {
-    let x, y;
-    const r1 = this.rng();
-    const r2 = this.rng();
-    const r3 = this.rng();
-    if (r1 < 0.5) {
-      x = r2 < 0.5 ? -35 : this.width + 35;
-      y = r3 * this.height;
-    } else {
-      x = r2 * this.width;
-      y = r3 < 0.5 ? -35 : this.height + 35;
+    let x = 0, y = 0;
+    const px = this.player ? this.player.x : this.width * 0.5;
+    const py = this.player ? this.player.y : this.height * 0.5;
+    for (let attempts = 0; attempts < 6; attempts++) {
+      const r1 = this.rng();
+      const r2 = this.rng();
+      const r3 = this.rng();
+      if (r1 < 0.5) {
+        x = r2 < 0.5 ? -35 : this.width + 35;
+        y = r3 * this.height;
+      } else {
+        x = r2 * this.width;
+        y = r3 < 0.5 ? -35 : this.height + 35;
+      }
+      if (Math.hypot(x - px, y - py) >= 180) break;
     }
     return { x, y };
   }
@@ -563,6 +568,10 @@ class ChronoGame {
       enemy.maxHp = enemy.hp;
       enemy.speed *= 1.15;
       enemy.scoreVal = Math.round(enemy.scoreVal * 2.2);
+    }
+
+    if (window.particles && typeof window.particles.addShockwave === 'function') {
+      window.particles.addShockwave(Math.max(15, Math.min(this.width - 15, pos.x)), Math.max(15, Math.min(this.height - 15, pos.y)), 32, '#ff0055', 6);
     }
 
     this.enemies.push(enemy);
@@ -720,6 +729,15 @@ class ChronoGame {
     this.bestWave = Math.max(this.bestWave, this.wave);
     localStorage.setItem('chrono_best_wave', this.bestWave);
 
+    // Wave 5 Milestone: Fair recovery cache
+    if (this.wave === 5) {
+      this.orbs.push(new EnergyOrb(this.player.x - 45, this.player.y, 1, 'health'));
+      this.orbs.push(new EnergyOrb(this.player.x + 45, this.player.y, 1, 'shield'));
+      if (window.particles && typeof window.particles.addFloatingText === 'function') {
+        window.particles.addFloatingText(this.player.x, this.player.y - 50, 'SECTOR 05 CLEARED: RECOVERY CACHE DEPLOYED!', '#00ff88', 20, true);
+      }
+    }
+
     // Autosave checkpoint
     if (window.progression) {
       window.progression.profile.highestWave = Math.max(window.progression.profile.highestWave || 0, this.wave);
@@ -874,6 +892,21 @@ class ChronoGame {
         segments: JSON.parse(JSON.stringify(segments)),
         timer: 0.5,
         damage: sliceDamage * 0.7
+      });
+    }
+
+    if (this.player.augments.afterimage) {
+      const burnDmg = 40 * this.player.augments.afterimage;
+      segments.forEach(seg => {
+        this.hazards.push({
+          x1: seg.x1, y1: seg.y1, x2: seg.x2, y2: seg.y2,
+          radius: 26,
+          life: 2.0,
+          maxLife: 2.0,
+          color: '#00f0ff',
+          damage: burnDmg,
+          type: 'afterimage_trail'
+        });
       });
     }
 
@@ -1132,6 +1165,10 @@ class ChronoGame {
         this.maxStyleAchieved = newRank;
         localStorage.setItem('chrono_max_style', newRank);
       }
+
+      if (ranksOrder.indexOf(newRank) >= ranksOrder.indexOf('S') && this.player && this.player.augments?.overdriveSurge && !this.player.isOverdrive) {
+        this.triggerOverdrive();
+      }
     }
 
     this.styleRankLetter.textContent = this.styleRank;
@@ -1158,21 +1195,34 @@ class ChronoGame {
       this.triggerWaveAugmentScreen();
       return;
     }
-    if (this.xp >= this.xpNeeded) {
+    while (this.xp >= this.xpNeeded) {
       this.xp -= this.xpNeeded;
       this.xpNeeded = Math.round(this.xpNeeded * 1.35 + 4);
       this.level++;
       this.score += 100 * this.level;
+      if (this.player) {
+        this.player.shield = Math.min(this.player.maxShield, this.player.shield + 20);
+      }
+      if (window.particles && typeof window.particles.addFloatingText === 'function') {
+        window.particles.addFloatingText(this.player ? this.player.x : this.width / 2, (this.player ? this.player.y : this.height / 2) - 45, `LEVEL UP! [LVL ${this.level}]`, '#00f0ff', 20, true);
+      }
+      if (window.chronoAudio && typeof window.chronoAudio.playLevelUp === 'function') {
+        window.chronoAudio.playLevelUp();
+      }
     }
   }
 
-  triggerWaveAugmentScreen() {
+  triggerWaveAugmentScreen(isReroll = false) {
     this.state = 'UPGRADE_SELECT';
-    window.chronoAudio.playLevelUp();
+    if (!isReroll && window.chronoAudio && typeof window.chronoAudio.playLevelUp === 'function') {
+      window.chronoAudio.playLevelUp();
+    }
     const upgradeScreen = document.getElementById('screen-upgrade');
     const cardsContainer = document.getElementById('cards-container');
     const rerollCount = document.getElementById('reroll-count');
-    rerollCount.textContent = window.augmentManager.rerollsRemaining;
+    const btnReroll = document.getElementById('btn-reroll');
+    if (rerollCount) rerollCount.textContent = window.augmentManager.rerollsRemaining;
+    if (btnReroll) btnReroll.disabled = (window.augmentManager.rerollsRemaining <= 0);
     cardsContainer.innerHTML = '';
     this.updateBuildPowerReadout();
 
@@ -1187,6 +1237,7 @@ class ChronoGame {
     cards.forEach(card => {
       const cardEl = document.createElement('div');
       cardEl.className = `upgrade-card rarity-${card.rarity}`;
+      cardEl.tabIndex = 0;
       const currentTier = window.augmentManager.activeAugments.get(card.id) || 0;
       cardEl.innerHTML = `
         <div class="card-rarity-pill">${card.rarity}</div>
@@ -1204,10 +1255,21 @@ class ChronoGame {
         this.startNextWaveAfterAugment();
         this.state = 'PLAYING';
       };
+      cardEl.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          cardEl.click();
+        }
+      };
       cardsContainer.appendChild(cardEl);
     });
     upgradeScreen.classList.remove('hidden');
     upgradeScreen.classList.add('active');
+
+    // Auto-focus first card for keyboard accessibility
+    if (cardsContainer.children.length > 0) {
+      cardsContainer.children[0].focus();
+    }
   }
 
   getBuildPower() {
@@ -1316,6 +1378,10 @@ class ChronoGame {
 
   // --- MAIN LOOP UPDATE ---
   update(rawDt) {
+    if (this.state === 'PAUSED') {
+      return;
+    }
+
     if (window.particles.hitStopTimer > 0) {
       window.particles.hitStopTimer -= rawDt;
       return;
@@ -1559,6 +1625,21 @@ class ChronoGame {
   updateHazards(dt) {
     if (!this.player) return;
     for (const h of this.hazards) {
+      if (h.type === 'afterimage_trail') {
+        h.life -= dt;
+        for (const e of this.enemies) {
+          if (!e.isDead && distToSegment(e.x, e.y, h.x1, h.y1, h.x2, h.y2) < e.radius + h.radius) {
+            const killed = e.takeDamage(h.damage * dt);
+            if (killed) {
+              this.enemiesKilled++;
+              this.score += e.scoreVal;
+              this.addXp(2);
+            }
+          }
+        }
+        continue;
+      }
+
       h.pulse += dt * 2.5;
       h.cooldown = Math.max(0, h.cooldown - dt);
       if (h.type === 'beam' || h.type === 'crossLaser') h.angle += h.speed * dt;
@@ -1611,6 +1692,7 @@ class ChronoGame {
         if (dead) { this.triggerGameOver(); return; }
       }
     }
+    this.hazards = this.hazards.filter(h => h.life === undefined || h.life > 0);
   }
 
   updateArenaAttacks(dt) {
@@ -1658,6 +1740,22 @@ class ChronoGame {
   renderHazards(ctx) {
     const now = performance.now() * 0.001;
     for (const h of this.hazards) {
+      if (h.type === 'afterimage_trail') {
+        const alpha = Math.max(0, h.life / (h.maxLife || 2.0));
+        ctx.save();
+        ctx.strokeStyle = `rgba(0, 240, 255, ${alpha * 0.8})`;
+        ctx.lineWidth = 14 * alpha;
+        ctx.lineCap = 'round';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(h.x1, h.y1);
+        ctx.lineTo(h.x2, h.y2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
       const pulse = 0.55 + Math.sin(h.pulse) * 0.2;
       ctx.save();
       if (h.type === 'field') {
