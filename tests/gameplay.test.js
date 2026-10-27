@@ -128,3 +128,15 @@ test('Official Reference Sheet: 3-Phase Boss, Archetypes and Pickups', () => {
     assert.ok(entitiesFile.includes(`this.type === '${p}'`), `Must support ${p} pickup`);
   }
 });
+
+test('Boss Phase Transitions & Audio Resilience: All audio triggers must be defined', () => {
+  const audioFile = fs.readFileSync(path.join(__dirname, '../public/js/audio.js'), 'utf8');
+  const entitiesFile = fs.readFileSync(path.join(__dirname, '../public/js/entities.js'), 'utf8');
+
+  // Must define both detonation and alias detonate so phase transitions never crash
+  assert.ok(audioFile.includes('playOverdriveDetonation('), 'Must define playOverdriveDetonation');
+  assert.ok(audioFile.includes('playOverdriveDetonate('), 'Must define playOverdriveDetonate alias');
+
+  // Must guard audio calls with typeof checks or try/catch in boss phase changes
+  assert.ok(entitiesFile.includes('typeof window.chronoAudio.playOverdriveDetonation'), 'Boss phase transition must safely guard audio execution');
+});

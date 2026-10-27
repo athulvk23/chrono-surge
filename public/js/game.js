@@ -1704,8 +1704,12 @@ class ChronoGame {
     const rawDt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
     this.lastTime = currentTime;
 
-    this.update(rawDt);
-    this.render();
+    try {
+      this.update(rawDt);
+      this.render();
+    } catch (err) {
+      console.error('Chrono Surge Game Loop caught error:', err);
+    }
 
     requestAnimationFrame((time) => this.loop(time));
   }

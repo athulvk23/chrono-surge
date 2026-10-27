@@ -635,6 +635,10 @@ class ChronoAudioEngine {
       ping.stop(now + i * 0.04 + 0.2);
     }
   }
+
+  playOverdriveDetonate(killsCount = 1) {
+    return this.playOverdriveDetonation(killsCount);
+  }
 }
 
 window.chronoAudio = new ChronoAudioEngine();

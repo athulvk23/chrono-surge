@@ -736,7 +736,17 @@ class Enemy {
             window.particles.addTrauma(0.65);
             window.particles.emitRingShockwave(this.x, this.y, 160, this.attackPhase === 2 ? '#ff0077' : '#a64cff');
           }
-          if (window.chronoAudio) window.chronoAudio.playOverdriveDetonate();
+          if (window.chronoAudio) {
+            try {
+              if (typeof window.chronoAudio.playOverdriveDetonation === 'function') {
+                window.chronoAudio.playOverdriveDetonation(3);
+              } else if (typeof window.chronoAudio.playOverdriveDetonate === 'function') {
+                window.chronoAudio.playOverdriveDetonate(3);
+              }
+            } catch (audioErr) {
+              console.warn('Audio play error on boss transition:', audioErr);
+            }
+          }
         }
 
         // Tracking movement towards arena center / player
