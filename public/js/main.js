@@ -181,7 +181,7 @@ window.addEventListener('DOMContentLoaded', () => {
       gameoverScreen.classList.add('hidden');
       titleScreen.classList.remove('hidden');
       titleScreen.classList.add('active');
-      game.state = 'TITLE';
+      game.returnToTitle();
       updateTouchControlsVisibility();
       if (window.refreshAllMetaUI) window.refreshAllMetaUI();
     });
@@ -205,9 +205,7 @@ window.addEventListener('DOMContentLoaded', () => {
       pauseScreen.classList.add('hidden');
       titleScreen.classList.remove('hidden');
       titleScreen.classList.add('active');
-      game.hud.classList.add('hidden');
-      game.state = 'TITLE';
-      window.chronoAudio.stopMusic();
+      game.returnToTitle();
       updateTouchControlsVisibility();
       if (window.refreshAllMetaUI) window.refreshAllMetaUI();
     });

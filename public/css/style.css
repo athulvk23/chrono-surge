@@ -1233,8 +1233,9 @@ html, body {
 #crt-overlay, #vignette-overlay, #overdrive-overlay, .hud-layer, .ui-screen { z-index: 5; }
 
 /* PHASE 7 — cinematic combat composition */
-#three-arena { filter: saturate(1.18) contrast(1.08); }
-#game-canvas { mix-blend-mode: screen; }
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  #game-canvas { mix-blend-mode: screen; }
+}
 #game-container::after {
   content:""; position:absolute; inset:0; pointer-events:none; z-index:12;
   background:

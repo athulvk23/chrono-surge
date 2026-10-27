@@ -93,7 +93,9 @@ class ChronoGame {
 
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    this.isMobile = !!isTouchDevice;
+    this.dpr = this.isMobile ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
 
     // Game states: TITLE, BRIEFING, PLAYING, UPGRADE_SELECT, GAMEOVER, PAUSED
     this.state = 'TITLE';
@@ -119,8 +121,8 @@ class ChronoGame {
     this.waveTotalEnemies = 1;
     this.isBossWave = false;
     this.bossRef = null;
-    this.performanceMode = false;
-    this.maxActiveBullets = 70;
+    this.performanceMode = this.isMobile;
+    this.maxActiveBullets = this.isMobile ? 40 : 70;
 
     // Experience & Leveling
     this.xp = 0;
@@ -211,11 +213,39 @@ class ChronoGame {
   resize() {
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.canvas.width = this.width * this.dpr;
-    this.canvas.height = this.height * this.dpr;
+    this.dpr = this.isMobile ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
     this.canvas.style.width = `${this.width}px`;
     this.canvas.style.height = `${this.height}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
+  returnToTitle() {
+    this.state = 'TITLE';
+    this.isBossWave = false;
+    this.bossRef = null;
+    this.enemies = [];
+    this.bullets = [];
+    this.orbs = [];
+    this.playerProjectiles = [];
+    this.delayedEchos = [];
+    this.hazards = [];
+    this.arenaAttacks = [];
+    this.player = null;
+
+    if (window.particles) window.particles.reset();
+    if (window.chronoAudio) window.chronoAudio.stopMusic();
+
+    if (this.hud) this.hud.classList.add('hidden');
+    if (this.bossHud) this.bossHud.classList.add('hidden');
+    if (this.tutorialBanner) this.tutorialBanner.classList.add('hidden');
+    this.clearTutorialHighlights();
+
+    if (this.ctx) {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+      this.renderCyberGrid(this.ctx);
+    }
   }
 
   startNewGame(coreType = 'vanguard', mode = 'endless', dailyConfig = null) {
@@ -1380,8 +1410,8 @@ class ChronoGame {
       }
     }
 
-    this.performanceMode = this.isBossWave || this.enemies.length > 30 || this.bullets.length > 34;
-    window.particles.maxParticles = this.performanceMode ? 360 : 650;
+    this.performanceMode = this.isMobile || this.isBossWave || this.enemies.length > 24 || this.bullets.length > 28 || !!(window.progression?.profile?.settings?.performanceMode);
+    window.particles.maxParticles = this.isMobile ? (this.performanceMode ? 140 : 200) : (this.performanceMode ? 360 : 650);
     window.particles.update(this.timeScale);
 
     this.updateStyleRank(dt);
@@ -1625,6 +1655,13 @@ class ChronoGame {
     ctx.clearRect(0, 0, this.width, this.height);
 
     this.renderCyberGrid(ctx);
+
+    // In TITLE, BRIEFING, or ONBOARDING, only render the ambient cyber grid, never frozen combat leftovers!
+    if (this.state === 'TITLE' || this.state === 'BRIEFING' || this.state === 'ONBOARDING') {
+      ctx.restore();
+      return;
+    }
+
     this.renderHazards(ctx);
 
     for (const orb of this.orbs) orb.render(ctx);

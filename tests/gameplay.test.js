@@ -140,3 +140,24 @@ test('Boss Phase Transitions & Audio Resilience: All audio triggers must be defi
   // Must guard audio calls with typeof checks or try/catch in boss phase changes
   assert.ok(entitiesFile.includes('typeof window.chronoAudio.playOverdriveDetonation'), 'Boss phase transition must safely guard audio execution');
 });
+
+test('Menu State Clean-Up & Mobile Performance: returnToTitle and mobile optimizations', () => {
+  const gameFile = fs.readFileSync(path.join(__dirname, '../public/js/game.js'), 'utf8');
+  const mainFile = fs.readFileSync(path.join(__dirname, '../public/js/main.js'), 'utf8');
+  const styleFile = fs.readFileSync(path.join(__dirname, '../public/css/style.css'), 'utf8');
+
+  // Must have returnToTitle method that clears entities
+  assert.ok(gameFile.includes('returnToTitle() {'), 'game.js must define returnToTitle()');
+  assert.ok(gameFile.includes('this.enemies = [];'), 'returnToTitle must clear enemies');
+  assert.ok(gameFile.includes('this.bullets = [];'), 'returnToTitle must clear bullets');
+  assert.ok(gameFile.includes('window.particles.reset()'), 'returnToTitle must reset particles');
+
+  // main.js must invoke returnToTitle on menu navigation
+  assert.ok(mainFile.includes('game.returnToTitle()'), 'main.js must call returnToTitle on returning to menu');
+
+  // render() must skip entity drawing on TITLE state
+  assert.ok(gameFile.includes("this.state === 'TITLE'"), 'render() must check for TITLE state');
+
+  // CSS performance checks
+  assert.ok(!styleFile.includes('#three-arena { filter:'), 'style.css must not use heavy CSS filters on WebGL canvas');
+});

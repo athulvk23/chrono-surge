@@ -185,9 +185,16 @@
   function animate(){
     requestAnimationFrame(animate);
     if (document.hidden) return;
+
+    // Check if performance mode or mobile
+    const isPerf = window.chronoGame && (window.chronoGame.performanceMode || window.progression?.profile?.settings?.performanceMode);
+    if (isTouch && isPerf && window.chronoGame && window.chronoGame.state === 'PLAYING') {
+      return; // Dedicate 100% GPU to 60fps canvas combat
+    }
+
     frame++;
-    // Background scenery only: render at half rate on touch devices.
-    if (isTouch && frame % 2) return;
+    // Background scenery only: render at 1/3 rate on touch devices to conserve battery & GPU
+    if (isTouch && frame % 3 !== 0) return;
     const reduced = window.progression?.profile?.settings?.reducedMotion;
     t += reduced ? 0.002 : 0.008;
     grid.material.opacity = 0.42 + Math.sin(t*1.8)*0.055;
