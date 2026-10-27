@@ -471,8 +471,8 @@
   }
 
   // ---------- settings ----------
-  const ACTION_LABELS = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', fire: 'Primary pulse', emp: 'EMP repulse', overdrive: 'Overdrive' };
-  const DEFAULT_BINDS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', emp: 'Space', overdrive: 'KeyF', fire: 'KeyE' };
+  const ACTION_LABELS = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', fire: 'Primary pulse', emp: 'EMP repulse', overdrive: 'Overdrive', parry: 'Chrono parry' };
+  const DEFAULT_BINDS = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', emp: 'Space', overdrive: 'KeyF', fire: 'KeyE', parry: 'KeyQ' };
   let capturingAction = null;
 
   function prettyKey(code) {

@@ -525,7 +525,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const binds = prog()?.profile?.settings?.keyBindings || {
       up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD',
-      emp: 'Space', overdrive: 'KeyF', fire: 'KeyE'
+      emp: 'Space', overdrive: 'KeyF', fire: 'KeyE', parry: 'KeyQ'
     };
 
     // Enter to start from title or briefing
@@ -537,6 +537,11 @@ window.addEventListener('DOMContentLoaded', () => {
     // Primary fire action
     if ((e.code === binds.fire || e.code === 'KeyE') && game.state === 'PLAYING') {
       game.firePlayerProjectile();
+    }
+
+    // Skill-based Chrono Parry
+    if ((e.code === binds.parry || e.code === 'KeyQ') && game.state === 'PLAYING') {
+      game.triggerParry();
     }
 
     // EMP repulse action

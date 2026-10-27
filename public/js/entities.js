@@ -2,6 +2,12 @@
    CHRONO SURGE: BEGINNING - ENTITIES, SKINS & COMBAT SYSTEM
    ========================================================= */
 
+if (typeof window === 'undefined') {
+  global.window = global;
+  global.window.chronoAudio = { playPlayerHit() {}, playDeflect() {}, playEnemyShatter() {}, setTimeDilation() {} };
+  global.window.particles = { addTrauma() {}, emitSparks() {}, addShockwave() {}, addFloatingText() {}, setChronoActive() {} };
+}
+
 function dist(x1, y1, x2, y2) {
   return Math.hypot(x2 - x1, y2 - y1);
 }
@@ -45,14 +51,29 @@ class PlayerVessel {
 
     this.maxChronoEnergy = 100;
     this.chronoEnergy = 100;
-    this.chronoDrainRate = 22 * Math.pow(0.93, chronoRank);
-    this.chronoRechargeRate = 18 * (1 + chronoRank * 0.08);
+    this.chronoDrainRate = 25 * Math.pow(0.92, chronoRank); // Phase 2: 25 energy/sec default
+    this.chronoRechargeRate = 8 * (1 + chronoRank * 0.10);  // Phase 2: 8 energy/sec default
     this.baseChronoRechargeRate = this.chronoRechargeRate;
+    this.energyRegenDelay = 1.0;                            // Phase 2: 1.0s delay after expenditure
+    this.energyRegenTimer = 0;
+
+    // Ability Energy Costs
+    this.hyperSlashCost = 20;                               // 20 energy
+    this.empCost = 35;                                      // 35 energy
+    this.parryCost = 15;                                    // 15 energy on successful reflection
+    this.parrySkillBonus = 5;                               // 5 energy refund on success (Net: 10)
+
+    // Skill-Based Parry Timing State Machine (Phase 3)
+    this.parryWindow = 0.18;                                // 180ms active window
+    this.parryRecovery = 0.30;                              // 300ms recovery window
+    this.minParryInterval = 0.45;                           // 450ms minimum activation interval
+    this.parryState = 'IDLE';                               // 'IDLE', 'ACTIVE', 'RECOVERY'
+    this.parryTimer = 0;
+    this.lastParryTimestamp = -10000;
+    this.parryRadius = 75;
 
     this.maxEmp = 100;
     this.empCharge = 100;
-    this.empRechargeRate = 12 * (1 + empRank * 0.09);
-    this.baseEmpRechargeRate = this.empRechargeRate;
     this.empRadius = 180 * (1 + empRank * 0.06);
 
     // Chrono Overdrive Ultimate
@@ -112,7 +133,7 @@ class PlayerVessel {
     this.invulnerableTimer = 0;
   }
 
-  update(dt, keys, width, height, joyMoveX = 0, joyMoveY = 0) {
+  update(dt, keys = {}, width = 1200, height = 800, joyMoveX = 0, joyMoveY = 0) {
     if (this.invulnerableTimer > 0) {
       this.invulnerableTimer -= dt;
     }
@@ -189,18 +210,71 @@ class PlayerVessel {
     this.trail.unshift({ x: this.x, y: this.y });
     if (this.trail.length > this.maxTrail) this.trail.pop();
 
+    // Chrono Energy & Stasis Dynamics (Phase 2)
     if (this.isSlowMo) {
       this.chronoEnergy = Math.max(0, this.chronoEnergy - this.chronoDrainRate * dt);
+      this.energyRegenTimer = this.energyRegenDelay;
       if (this.chronoEnergy <= 0) {
+        this.chronoEnergy = 0;
         this.isSlowMo = false;
-        window.chronoAudio.setTimeDilation(false);
+        if (window.chronoAudio) window.chronoAudio.setTimeDilation(false);
+        if (window.particles) window.particles.setChronoActive(false);
       }
+    } else if (this.energyRegenTimer > 0) {
+      this.energyRegenTimer -= dt;
     } else {
       this.chronoEnergy = Math.min(this.maxChronoEnergy, this.chronoEnergy + this.chronoRechargeRate * dt);
     }
 
-    this.empCharge = Math.min(this.maxEmp, this.empCharge + this.empRechargeRate * dt);
+    // Skill-based Parry Timing Window State Machine (Phase 3)
+    if (this.parryState === 'ACTIVE') {
+      this.parryTimer -= dt;
+      if (this.parryTimer <= 0) {
+        this.parryState = 'RECOVERY';
+        this.parryTimer = this.parryRecovery;
+      }
+    } else if (this.parryState === 'RECOVERY') {
+      this.parryTimer -= dt;
+      if (this.parryTimer <= 0) {
+        this.parryState = 'IDLE';
+        this.parryTimer = 0;
+      }
+    }
+
+    // Synchronize EMP display charge with unified Chrono Energy
+    this.empCharge = (this.chronoEnergy / this.maxChronoEnergy) * 100;
     return mag > 0.1;
+  }
+
+  consumeEnergy(amount) {
+    if (amount <= 0) return true;
+    if (this.chronoEnergy < amount) return false;
+    this.chronoEnergy = Math.max(0, this.chronoEnergy - amount);
+    this.energyRegenTimer = this.energyRegenDelay;
+    return true;
+  }
+
+  addEnergy(amount) {
+    if (amount <= 0) return;
+    this.chronoEnergy = Math.min(this.maxChronoEnergy, Math.max(0, this.chronoEnergy + amount));
+  }
+
+  triggerParry() {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (now - this.lastParryTimestamp < this.minParryInterval * 1000) return false;
+    if (this.parryState !== 'IDLE') return false;
+
+    this.parryState = 'ACTIVE';
+    this.parryTimer = this.parryWindow;
+    this.lastParryTimestamp = now;
+
+    if (window.chronoAudio && typeof window.chronoAudio.playDeflect === 'function') {
+      window.chronoAudio.playDeflect();
+    }
+    if (window.particles && typeof window.particles.addShockwave === 'function') {
+      window.particles.addShockwave(this.x, this.y, this.parryRadius, '#00f0ff', 14);
+    }
+    return true;
   }
 
   calculateTrajectory(aimX, aimY, width, height) {
@@ -348,6 +422,22 @@ class PlayerVessel {
 
     // 3. Draw Player Core Ship
     ctx.translate(this.x, this.y);
+
+    // Active Skill Parry Barrier Visual (Phase 3)
+    if (this.parryState === 'ACTIVE') {
+      ctx.save();
+      ctx.strokeStyle = '#00f0ff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 22;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.parryRadius * (1 - (this.parryTimer / this.parryWindow) * 0.12), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#00f0ff';
+      ctx.fill();
+      ctx.restore();
+    }
 
     if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 60) % 2 === 0) {
       ctx.globalAlpha = 0.4;
@@ -526,6 +616,9 @@ class Enemy {
     this.maxTrail = 9;
     this.isDead = false;
     this.isBoss = false;
+    this.isElite = false;
+    this.stunTimer = 0;
+    this.empImmunityTimer = 0;
 
     this.isMarkedByOverdrive = false;
     this.overdriveDamageAccum = 0;
@@ -605,6 +698,16 @@ class Enemy {
         bullets.push(b);
         this.shootTimer = 0;
       }
+      return;
+    }
+
+    if (this.empImmunityTimer > 0) this.empImmunityTimer -= dt;
+    if (this.stunTimer > 0) {
+      this.stunTimer -= dt;
+      this.vx *= Math.pow(0.85, dt * 60);
+      this.vy *= Math.pow(0.85, dt * 60);
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
       return;
     }
 
@@ -1168,6 +1271,7 @@ class EnemyBullet {
     this.color = color;
     this.damage = damage;
     this.isDeflected = false;
+    this.canBeReflected = true; // Reflection eligibility declaration
     this.life = 6.0;
     this.trail = [];
     this.type = 'basic';
@@ -1245,13 +1349,19 @@ class EnemyBullet {
   }
 
   deflect(dashAngle) {
+    if (this.isDeflected || this.canBeReflected === false) return false;
     this.isDeflected = true;
     this.damage *= 2.5;
     const speed = Math.hypot(this.vx, this.vy) * 1.5;
     this.vx = Math.cos(dashAngle) * speed;
     this.vy = Math.sin(dashAngle) * speed;
-    window.chronoAudio.playDeflect();
-    window.particles.emitSparks(this.x, this.y, 10, '#00f0ff', 1.8);
+    if (window.chronoAudio && typeof window.chronoAudio.playDeflect === 'function') {
+      window.chronoAudio.playDeflect();
+    }
+    if (window.particles && typeof window.particles.emitSparks === 'function') {
+      window.particles.emitSparks(this.x, this.y, 10, '#00f0ff', 1.8);
+    }
+    return true;
   }
 
   render(ctx) {
@@ -1483,4 +1593,14 @@ class EnergyOrb {
 
     ctx.restore();
   }
+}
+
+if (typeof module === 'object' && module.exports) {
+  module.exports = {
+    PlayerVessel,
+    Enemy,
+    EnemyBullet,
+    PlayerProjectile,
+    EnergyOrb
+  };
 }

@@ -749,6 +749,12 @@ class ChronoGame {
   executeHyperSlash(targetX, targetY) {
     if (!this.player || this.player.isDashing) return;
 
+    // Phase 2: Check & Consume Hyper-Slash Chrono Energy
+    if (!this.player.consumeEnergy(this.player.hyperSlashCost)) {
+      window.particles?.addFloatingText(this.player.x, this.player.y, `INSUFFICIENT ENERGY (${this.player.hyperSlashCost} REQ)`, '#ff0055', 16, true);
+      return;
+    }
+
     const segments = this.player.calculateTrajectory(targetX, targetY, this.width, this.height);
     if (!segments || segments.length === 0) return;
 
@@ -756,6 +762,9 @@ class ChronoGame {
     this.player.dashSegments = segments;
     this.player.dashSegmentIdx = 0;
     this.player.dashT = 0;
+
+    // Trigger precise active parry timing window during kinetic dash
+    this.player.triggerParry();
 
     window.chronoAudio.playDashSlice();
     window.particles.addTrauma(0.2);
@@ -818,20 +827,29 @@ class ChronoGame {
         }
       }
 
-      // Bullet Deflection
-      for (const bullet of this.bullets) {
-        if (bullet.isDeflected) continue;
-        const d = distToSegment(bullet.x, bullet.y, seg.x1, seg.y1, seg.x2, seg.y2);
-        if (d <= bullet.radius + sliceWidth) {
-          bullet.deflect(segAngle);
-          this.runDeflects++;
-          this.addStylePoints(60);
-          this.player.overdriveCharge = Math.min(100, this.player.overdriveCharge + 12 * (this.player.overdriveGainMult || 1));
-          window.particles.triggerHitStop(0.025);
-          window.particles.addFloatingText(bullet.x, bullet.y, 'DEFLECT!', '#00f0ff', 15, true);
+      // Skill-Based Bullet Parry / Deflection (Requires active parry timing window)
+      if (this.player.parryState === 'ACTIVE') {
+        for (const bullet of this.bullets) {
+          if (bullet.isDeflected || bullet.canBeReflected === false) continue;
+          const d = distToSegment(bullet.x, bullet.y, seg.x1, seg.y1, seg.x2, seg.y2);
+          if (d <= bullet.radius + sliceWidth) {
+            if (this.player.chronoEnergy >= this.player.parryCost) {
+              if (bullet.deflect(segAngle)) {
+                // Net cost: parryCost (15) - skillBonus (5) = 10
+                this.player.consumeEnergy(this.player.parryCost - this.player.parrySkillBonus);
+                this.runDeflects++;
+                this.addStylePoints(60);
+                this.player.overdriveCharge = Math.min(100, this.player.overdriveCharge + 12 * (this.player.overdriveGainMult || 1));
+                window.particles.triggerHitStop(0.035);
+                window.particles.addFloatingText(bullet.x, bullet.y, 'PARRY! +5 BONUS', '#00f0ff', 15, true);
 
-          if (this.player.augments.shatterNova) {
-            window.particles.addShockwave(bullet.x, bullet.y, 140, '#ffe600', 20);
+                if (this.player.augments.shatterNova) {
+                  window.particles.addShockwave(bullet.x, bullet.y, 140, '#ffe600', 20);
+                }
+              }
+            } else {
+              window.particles.addFloatingText(this.player.x, this.player.y, 'PARRY FAILED // LOW ENERGY', '#ff0055', 14, false);
+            }
           }
         }
       }
@@ -919,11 +937,49 @@ class ChronoGame {
     }
   }
 
-  triggerEmp() {
-    if (!this.player || this.player.empCharge < 50) return;
-
-    this.player.empCharge = 0;
+  triggerParry() {
+    if (!this.player) return false;
     const p = this.player;
+    const ok = p.triggerParry();
+    if (!ok) {
+      if (p.parryState === 'RECOVERY') {
+        window.particles?.addFloatingText(p.x, p.y, 'PARRY RECOVERY', '#798ba8', 14, false);
+      }
+      return false;
+    }
+
+    // Immediately resolve bullets inside parry radius upon activation
+    for (const b of this.bullets) {
+      if (b.isDeflected || b.canBeReflected === false) continue;
+      if (dist(p.x, p.y, b.x, b.y) <= p.parryRadius + b.radius) {
+        if (p.chronoEnergy >= p.parryCost) {
+          const reflectAngle = Math.atan2(b.y - p.y, b.x - p.x) + Math.PI;
+          if (b.deflect(reflectAngle)) {
+            // Apply energy accounting: cost 15, return 5 skill bonus (net 10)
+            p.consumeEnergy(p.parryCost - p.parrySkillBonus);
+            this.runDeflects++;
+            this.addStylePoints(75);
+            p.overdriveCharge = Math.min(100, p.overdriveCharge + 14 * (p.overdriveGainMult || 1));
+            window.particles?.triggerHitStop(0.04);
+            window.particles?.addFloatingText(b.x, b.y, 'PARRY! +5 BONUS', '#00f0ff', 16, true);
+          }
+        } else {
+          window.particles?.addFloatingText(p.x, p.y, 'PARRY FAILED // LOW ENERGY', '#ff0055', 14, false);
+        }
+      }
+    }
+    return true;
+  }
+
+  triggerEmp() {
+    if (!this.player) return;
+    const p = this.player;
+
+    // Phase 2: Check & Consume EMP Chrono Energy (35 units)
+    if (!p.consumeEnergy(p.empCost)) {
+      window.particles?.addFloatingText(p.x, p.y, `INSUFFICIENT ENERGY (${p.empCost} REQ)`, '#ff0055', 16, true);
+      return;
+    }
 
     window.chronoAudio.playEmpBlast();
     window.particles.addTrauma(0.4);
@@ -948,10 +1004,33 @@ class ChronoGame {
       const d = dist(p.x, p.y, e.x, e.y);
       if (d <= p.empRadius) {
         const angle = Math.atan2(e.y - p.y, e.x - p.x);
-        e.vx += Math.cos(angle) * 350;
-        e.vy += Math.sin(angle) * 350;
-        if (e.takeDamage(100, angle)) {
-          this.handleEnemyKill(e, angle);
+        if (e.isBoss) {
+          // Boss Stun Resistance & Anti-Lockout (Phase 4 & 6)
+          if (e.empImmunityTimer > 0) {
+            window.particles.addFloatingText(e.x, e.y, 'EMP RESISTED', '#ff0055', 15, true);
+          } else {
+            e.empImmunityTimer = 6.0; // 6s immunity prevents boss stun locks
+            e.stunTimer = 0.25;      // Brief interrupt
+            window.particles.addFloatingText(e.x, e.y, 'STAGGERED!', '#ffe600', 16, true);
+            e.vx += Math.cos(angle) * 120;
+            e.vy += Math.sin(angle) * 120;
+          }
+        } else if (e.isElite) {
+          // Elite: 50% stun reduction
+          e.stunTimer = 0.9;
+          e.vx += Math.cos(angle) * 220;
+          e.vy += Math.sin(angle) * 220;
+          if (e.takeDamage(100, angle)) {
+            this.handleEnemyKill(e, angle);
+          }
+        } else {
+          // Standard enemies: 1.8s stun
+          e.stunTimer = 1.8;
+          e.vx += Math.cos(angle) * 350;
+          e.vy += Math.sin(angle) * 350;
+          if (e.takeDamage(100, angle)) {
+            this.handleEnemyKill(e, angle);
+          }
         }
       }
     }
@@ -1379,6 +1458,28 @@ class ChronoGame {
           }
         }
       } else {
+        // Phase 3: Skill-Based Active Parry Detection
+        if (this.player.parryState === 'ACTIVE' && b.canBeReflected !== false && !b.isDeflected) {
+          const dToPlayer = dist(b.x, b.y, this.player.x, this.player.y);
+          if (dToPlayer <= this.player.parryRadius + b.radius) {
+            if (this.player.chronoEnergy >= this.player.parryCost) {
+              const reflectAngle = Math.atan2(b.y - this.player.y, b.x - this.player.x) + Math.PI;
+              if (b.deflect(reflectAngle)) {
+                // Phase 2 Accounting: 15 cost, 5 skill bonus (net 10)
+                this.player.consumeEnergy(this.player.parryCost - this.player.parrySkillBonus);
+                this.runDeflects++;
+                this.addStylePoints(75);
+                this.player.overdriveCharge = Math.min(100, this.player.overdriveCharge + 14 * (this.player.overdriveGainMult || 1));
+                window.particles?.triggerHitStop(0.04);
+                window.particles?.addFloatingText(b.x, b.y, 'PARRY! +5 BONUS', '#00f0ff', 16, true);
+                continue;
+              }
+            } else {
+              window.particles?.addFloatingText(this.player.x, this.player.y, 'PARRY FAILED // LOW ENERGY', '#ff0055', 14, false);
+            }
+          }
+        }
+
         if (!this.player.isDashing && dist(b.x, b.y, this.player.x, this.player.y) < b.radius + this.player.radius) {
           b.life = 0;
           if (this.gameMode === 'tutorial') {
@@ -1652,11 +1753,12 @@ class ChronoGame {
 
     const chronoPct = Math.max(0, (this.player.chronoEnergy / this.player.maxChronoEnergy) * 100);
     this.chronoFill.style.width = `${chronoPct}%`;
-    this.chronoValue.textContent = this.player.isSlowMo ? 'ACTIVE' : `${Math.round(chronoPct)}%`;
+    this.chronoValue.textContent = this.player.parryState === 'ACTIVE' ? 'PARRY!' : (this.player.isSlowMo ? 'STASIS' : `${Math.round(chronoPct)}%`);
 
-    const empPct = Math.max(0, (this.player.empCharge / this.player.maxEmp) * 100);
+    const empReady = this.player.chronoEnergy >= this.player.empCost;
+    const empPct = Math.min(100, (this.player.chronoEnergy / this.player.empCost) * 100);
     this.empFill.style.width = `${empPct}%`;
-    this.empValue.textContent = empPct >= 50 ? 'READY' : 'CHARGING';
+    this.empValue.textContent = empReady ? 'READY [R-CLICK]' : `${Math.round(this.player.chronoEnergy)}/35`;
 
     const odPct = this.player.isOverdrive
       ? Math.max(0, (this.player.overdriveTimer / this.player.overdriveDuration) * 100)

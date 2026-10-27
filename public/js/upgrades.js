@@ -52,11 +52,61 @@ const AUGMENT_DEFINITIONS = [
     name: 'CHRONO MATRIX',
     rarity: 'common',
     icon: '⏳',
-    desc: 'Time-dilation meter drains 40% slower and regenerates 50% faster.',
+    desc: 'Time-dilation meter drains 25% slower and passive energy regeneration speed +30%.',
     maxTier: 3,
     apply: (player) => {
-      player.chronoDrainRate *= 0.65;
-      player.chronoRechargeRate *= 1.4;
+      player.chronoDrainRate = Math.max(14, player.chronoDrainRate * 0.75);
+      player.chronoRechargeRate = Math.min(20, player.chronoRechargeRate * 1.30);
+    }
+  },
+  {
+    id: 'temporal_efficiency',
+    name: 'TEMPORAL EFFICIENCY',
+    rarity: 'common',
+    icon: '⏱️',
+    desc: 'Reduces Chrono-Stasis energy consumption by 15% per tier (bounded to prevent infinite stasis).',
+    maxTier: 3,
+    apply: (player) => {
+      player.chronoDrainRate = Math.max(14, player.chronoDrainRate * 0.85);
+      player.augments.temporalEfficiency = (player.augments.temporalEfficiency || 0) + 1;
+    }
+  },
+  {
+    id: 'feedback_loop',
+    name: 'FEEDBACK LOOP',
+    rarity: 'rare',
+    icon: '🔋',
+    desc: 'Successful projectile parries return +4 additional Chrono Energy (max bonus: 13 units).',
+    maxTier: 2,
+    apply: (player) => {
+      player.parrySkillBonus = Math.min(13, (player.parrySkillBonus || 5) + 4);
+      player.augments.feedbackLoop = (player.augments.feedbackLoop || 0) + 1;
+    }
+  },
+  {
+    id: 'glass_cannon',
+    name: 'GLASS CANNON',
+    rarity: 'rare',
+    icon: '💎',
+    desc: 'Outgoing kinetic and pulse damage increased by +45%, but core shield capacity is reduced by 25%.',
+    maxTier: 1,
+    apply: (player) => {
+      player.sliceDamage *= 1.45;
+      player.primaryDamage *= 1.45;
+      player.maxShield = Math.round(player.maxShield * 0.75);
+      player.shield = Math.min(player.shield, player.maxShield);
+      player.augments.glassCannon = true;
+    }
+  },
+  {
+    id: 'afterimage_trail',
+    name: 'AFTERIMAGE',
+    rarity: 'epic',
+    icon: '👤',
+    desc: 'Hyper-Slash leaves a chronal afterimage trail that scorches anomalies for 40 kinetic damage.',
+    maxTier: 2,
+    apply: (player) => {
+      player.augments.afterimage = (player.augments.afterimage || 0) + 1;
     }
   },
   {
@@ -227,3 +277,7 @@ class AugmentManager {
 }
 
 window.augmentManager = new AugmentManager();
+
+if (typeof module === 'object' && module.exports) {
+  module.exports = { AUGMENT_DEFINITIONS, AugmentManager };
+}

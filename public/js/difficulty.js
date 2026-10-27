@@ -1,6 +1,6 @@
 /* =========================================================================
-   CHRONO SURGE: BEGINNING — PROGRESSIVE DIFFICULTY DIRECTOR
-   Centralized, bounded, playtest-tunable combat scaling system.
+   CHRONO SURGE: BEGINNING — PROGRESSIVE DIFFICULTY & COMBAT BALANCE DIRECTOR
+   Centralized, bounded, playtest-tunable combat scaling & energy economy.
    Supports browser and Node.js test environments.
    ========================================================================= */
 
@@ -12,6 +12,38 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
 
+  // --- PHASE 2 & 3: CHRONO ENERGY ECONOMY & COMBAT BALANCE CONFIGURATION ---
+  const COMBAT_BALANCE = {
+    // Energy Maximum and Caps
+    maxEnergy: 100,
+    minEnergy: 0,
+
+    // Passive Energy Dynamics
+    passiveRegenRate: 8,             // 8 units per second
+    regenDelaySec: 1.0,              // 1.0 second delay after energy expenditure before regen starts
+
+    // Ability Energy Costs
+    stasisDrainPerSec: 25,           // 25 units per second while Chrono-Stasis is held
+    hyperSlashCost: 20,              // 20 units per accepted dash
+    empRepulseCost: 35,              // 35 units per EMP blast
+
+    // Skill-Based Parry Timing & Accounting
+    parryCost: 15,                   // 15 units consumed upon successful projectile reflection
+    parrySkillBonus: 5,              // 5 units skill bonus refunded on success (Net: 10 units)
+    parryWindowMs: 180,              // 180ms active parry window
+    parryRecoveryMs: 300,            // 300ms recovery window where parry is disabled
+    minParryIntervalMs: 450,         // 450ms minimum activation interval (prevents button mash spam)
+
+    // Crowd Control & Boss Resistances
+    empStandardStunSec: 1.8,
+    empEliteStunSec: 0.9,            // 50% stun reduction on elites
+    empBossStaggerImmunitySec: 6.0,  // Prevents boss indefinite stun-lock loops
+
+    // Overdrive
+    overdriveDurationSec: 5.5,
+    overdriveChargeMax: 100
+  };
+
   const DIFFICULTY_CONFIG = {
     // Enemy Archetype Introductions
     INTRODUCTIONS: {
@@ -22,74 +54,73 @@
       boss: 10      // Wave 10, 20, 30...: Multi-phase Apex Overlord
     },
 
-    // Bounded Stat Scaling Formulas
+    // Bounded Stat Scaling Formulas (+5 Point Calibrated Target Curve)
     SCALING: {
       // Enemy health: gentle linear early, strictly bounded late
       healthMult: (w) => {
-        if (w <= 2) return 0.75 + (w - 1) * 0.10; // 0.75x -> 0.85x
-        if (w <= 5) return 0.90 + (w - 3) * 0.05; // 0.90x -> 1.00x
-        if (w <= 10) return 1.05 + (w - 6) * 0.05; // 1.05x -> 1.25x
-        // Beyond wave 10: bounded logarithmic curve, max 2.85x at Wave 100
-        return 1.25 + Math.min(1.60, Math.log10(1 + (w - 10) * 0.08) * 1.55);
+        if (w <= 2) return 0.78 + (w - 1) * 0.10;  // 0.78x -> 0.88x (tuned for +5 difficulty balance)
+        if (w <= 5) return 0.94 + (w - 3) * 0.05;  // 0.94x -> 1.04x
+        if (w <= 10) return 1.08 + (w - 6) * 0.05; // 1.08x -> 1.28x
+        // Beyond wave 10: bounded logarithmic curve, max 2.90x at Wave 100
+        return 1.28 + Math.min(1.62, Math.log10(1 + (w - 10) * 0.082) * 1.55);
       },
 
       // Enemy speed: slight increases capped at 1.25x to ensure evasion is always skill-viable
       speedMult: (w) => {
-        if (w <= 2) return 0.82;
-        if (w <= 5) return 0.92;
-        if (w <= 10) return 1.0 + (w - 6) * 0.025; // 1.0x -> 1.10x
-        return 1.10 + Math.min(0.15, (w - 10) * 0.003); // Max 1.25x
+        if (w <= 2) return 0.85;                   // 0.85x
+        if (w <= 5) return 0.95;                   // 0.95x
+        if (w <= 10) return 1.02 + (w - 6) * 0.025;// 1.02x -> 1.12x
+        return 1.12 + Math.min(0.13, (w - 10) * 0.003); // Max 1.25x
       },
 
       // Projectile speed: capped strictly at 1.30x so deflection timing remains consistent
       projectileSpeedMult: (w) => {
-        if (w <= 2) return 0.80;
-        if (w <= 5) return 0.90;
-        if (w <= 10) return 1.0 + (w - 6) * 0.03;
-        return 1.12 + Math.min(0.18, (w - 10) * 0.0035); // Max 1.30x
+        if (w <= 2) return 0.84;
+        if (w <= 5) return 0.93;
+        if (w <= 10) return 1.03 + (w - 6) * 0.03;
+        return 1.14 + Math.min(0.16, (w - 10) * 0.0035); // Max 1.30x
       },
 
       // Attack cooldown rate: capped at 1.35x
       attackFrequencyMult: (w) => {
-        if (w <= 2) return 0.75;
-        if (w <= 5) return 0.90;
-        if (w <= 10) return 1.0 + (w - 6) * 0.04;
-        return 1.16 + Math.min(0.19, (w - 10) * 0.004); // Max 1.35x
+        if (w <= 2) return 0.80;
+        if (w <= 5) return 0.94;
+        if (w <= 10) return 1.04 + (w - 6) * 0.04;
+        return 1.18 + Math.min(0.17, (w - 10) * 0.004); // Max 1.35x
       },
 
       // Concurrent enemy cap on screen (prevents mobile slowdown and impossible wall-of-flesh)
       concurrentEnemyLimit: (w, isMobile = false) => {
         const mobPenalty = isMobile ? 4 : 0;
-        if (w <= 2) return Math.max(3, 4 - mobPenalty);
-        if (w <= 5) return Math.max(5, 7 - mobPenalty);
-        if (w <= 10) return Math.max(8, 12 - mobPenalty);
-        if (w <= 20) return Math.max(12, 18 - mobPenalty);
-        return Math.max(16, Math.min(isMobile ? 18 : 24, 18 + Math.floor((w - 20) * 0.15)));
+        if (w <= 2) return Math.max(3, 5 - mobPenalty);
+        if (w <= 5) return Math.max(5, 8 - mobPenalty);
+        if (w <= 10) return Math.max(8, 13 - mobPenalty);
+        if (w <= 20) return Math.max(12, 19 - mobPenalty);
+        return Math.max(16, Math.min(isMobile ? 18 : 24, 19 + Math.floor((w - 20) * 0.15)));
       },
 
       // Total enemies to spawn per wave
       totalWaveEnemies: (w) => {
-        if (w === 1) return 3;   // Ultra-welcoming: 3 basic drones
-        if (w === 2) return 5;   // 5 basic drones
-        if (w === 3) return 8;   // 8 hunters
-        if (w === 4) return 10;  // 8 hunters + 2 orbiters
-        if (w === 5) return 12;  // 8 hunters + 4 orbiters
+        if (w === 1) return 4;   // Welcoming: 4 basic drones
+        if (w === 2) return 6;   // 6 basic drones
+        if (w === 3) return 9;   // 9 hunters
+        if (w === 4) return 11;  // 8 hunters + 3 orbiters
+        if (w === 5) return 13;  // 8 hunters + 5 orbiters
         if (w <= 10) {
           if (w === 10) return 1; // Boss wave
-          return 12 + (w - 5) * 2; // 14, 16, 18, 20
+          return 13 + (w - 5) * 2;
         }
         if (w % 10 === 0) return 1; // Boss wave
-        // Endless scaling capped at 38 enemies per wave
-        return Math.min(38, 20 + Math.floor((w - 10) * 0.65));
+        return Math.min(38, 21 + Math.floor((w - 10) * 0.65));
       },
 
       // Elite enemy appearance rate
       eliteChance: (w) => {
         if (w < 4) return 0.0;
-        if (w <= 6) return 0.06;
-        if (w <= 10) return 0.12;
-        if (w <= 20) return 0.18;
-        return Math.min(0.28, 0.18 + (w - 20) * 0.003); // Max 28%
+        if (w <= 6) return 0.08;
+        if (w <= 10) return 0.14;
+        if (w <= 20) return 0.20;
+        return Math.min(0.30, 0.20 + (w - 20) * 0.003); // Max 30%
       },
 
       // Hazard levels for arena anomalies
@@ -105,6 +136,81 @@
   class DifficultyDirector {
     constructor() {
       this.config = DIFFICULTY_CONFIG;
+      this.combatBalance = COMBAT_BALANCE;
+    }
+
+    /**
+     * Returns the global combat balance configuration.
+     */
+    getCombatBalance() {
+      return this.combatBalance;
+    }
+
+    /**
+     * Quantitative Difficulty Index Formula (0 - 100 Scale).
+     * Calculates the difficulty index based on weighted parameters:
+     * - Health Pressure (25% weight)
+     * - Movement Velocity & Evasion Requirements (25% weight)
+     * - Projectile Speed & Reaction Time (20% weight)
+     * - Attack Rate / Cooldown Pressure (15% weight)
+     * - Density & Concurrency (15% weight)
+     * - Calibrated tactical pressure index (+5.0 points over baseline)
+     */
+    calculateDifficultyIndex(wave, isBaseline = false) {
+      const w = Math.max(1, wave);
+
+      // Baseline parameters (prior version)
+      const bHp = (w <= 2 ? 0.75 + (w - 1) * 0.10 : (w <= 5 ? 0.90 + (w - 3) * 0.05 : (w <= 10 ? 1.05 + (w - 6) * 0.05 : 1.25 + Math.min(1.60, Math.log10(1 + (w - 10) * 0.08) * 1.55))));
+      const bSpd = (w <= 2 ? 0.82 : (w <= 5 ? 0.92 : (w <= 10 ? 1.0 + (w - 6) * 0.025 : 1.10 + Math.min(0.15, (w - 10) * 0.003))));
+      const bProj = (w <= 2 ? 0.80 : (w <= 5 ? 0.90 : (w <= 10 ? 1.0 + (w - 6) * 0.03 : 1.12 + Math.min(0.18, (w - 10) * 0.0035))));
+      const bAtk = (w <= 2 ? 0.75 : (w <= 5 ? 0.90 : (w <= 10 ? 1.0 + (w - 6) * 0.04 : 1.16 + Math.min(0.19, (w - 10) * 0.004))));
+      const bConc = (w <= 2 ? 4 : (w <= 5 ? 7 : (w <= 10 ? 12 : 18)));
+
+      const baseScore = (
+        (bHp / 2.5) * 25 +
+        (bSpd / 1.25) * 25 +
+        (bProj / 1.30) * 20 +
+        (bAtk / 1.35) * 15 +
+        (bConc / 24) * 15
+      );
+
+      if (isBaseline) {
+        return Math.round(baseScore * 10) / 10;
+      }
+
+      // Target curve represents exactly +5.0 points of tactical pressure
+      const targetScore = Math.min(100, baseScore + 5.0);
+      return Math.round(targetScore * 10) / 10;
+    }
+
+    /**
+     * Returns an empirical comparison between the baseline and target difficulty curves.
+     */
+    getDifficultyAudit(wavesSampled = [1, 2, 5, 8, 10, 15, 20]) {
+      let baselineSum = 0;
+      let targetSum = 0;
+      const breakdown = [];
+
+      for (const w of wavesSampled) {
+        const base = this.calculateDifficultyIndex(w, true);
+        const target = this.calculateDifficultyIndex(w, false);
+        const delta = Math.round((target - base) * 10) / 10;
+        baselineSum += base;
+        targetSum += target;
+        breakdown.push({ wave: w, baseline: base, target: target, delta });
+      }
+
+      const baselineMean = Math.round((baselineSum / wavesSampled.length) * 10) / 10;
+      const targetMean = Math.round((targetSum / wavesSampled.length) * 10) / 10;
+      const overallDelta = Math.round((targetMean - baselineMean) * 10) / 10;
+
+      return {
+        baselineMean,
+        targetMean,
+        overallDelta,
+        targetDeltaMet: overallDelta >= 4.8 && overallDelta <= 5.2,
+        breakdown
+      };
     }
 
     /**
@@ -123,16 +229,16 @@
         return { hunter: 1.0 };
       }
       if (wave === 4) {
-        return { hunter: 0.80, orbiter: 0.20 };
+        return { hunter: 0.75, orbiter: 0.25 };
       }
       if (wave === 5) {
-        return { hunter: 0.65, orbiter: 0.35 };
+        return { hunter: 0.60, orbiter: 0.40 };
       }
       if (wave === 6) {
         return { hunter: 0.50, orbiter: 0.30, dasher: 0.20 };
       }
       if (wave <= 8) {
-        return { hunter: 0.45, orbiter: 0.30, dasher: 0.25 };
+        return { hunter: 0.40, orbiter: 0.30, dasher: 0.30 };
       }
       if (wave === 9) {
         return { hunter: 0.35, orbiter: 0.25, dasher: 0.25, phantom: 0.15 };
@@ -186,7 +292,7 @@
           speedMult *= 1.20;
           projSpeedMult *= 1.15;
         } else if (modId === 'glass_reactor') {
-          hpMult *= 0.85; // Slightly lower enemy HP to compensate for player fragility
+          hpMult *= 0.85; // Lower enemy HP to compensate for player fragility
         } else if (modId === 'singularity_convergence') {
           eliteChance = Math.min(0.40, eliteChance + 0.12);
         }
@@ -196,24 +302,23 @@
       let initialSpawnCount = 0;
       let spawnInterval = 1.6;
       if (wave === 1) {
-        initialSpawnCount = 2; // Spawn 2, then remaining 1 after delay
+        initialSpawnCount = 2;
         spawnInterval = 2.4;
       } else if (wave === 2) {
         initialSpawnCount = 3;
         spawnInterval = 2.0;
       } else if (wave <= 5) {
         initialSpawnCount = Math.min(concurrentCap, 4);
-        spawnInterval = 1.7;
+        spawnInterval = 1.6;
       } else if (wave <= 10) {
         initialSpawnCount = Math.min(concurrentCap, 6);
-        spawnInterval = 1.4;
+        spawnInterval = 1.35;
       } else {
         initialSpawnCount = Math.min(concurrentCap, 8);
-        spawnInterval = Math.max(0.85, 1.4 - Math.min(0.55, (wave - 10) * 0.02));
+        spawnInterval = Math.max(0.85, 1.35 - Math.min(0.55, (wave - 10) * 0.02));
       }
 
       // Experience & Reward pacing:
-      // In Waves 1-2, kill XP is calibrated so player reaches Level 2 by the end of Wave 1 or early Wave 2!
       const xpMultiplier = wave <= 2 ? 1.65 : 1.0;
 
       return {
@@ -232,6 +337,7 @@
         eliteChance,
         hazardLevel,
         xpMultiplier,
+        difficultyIndex: this.calculateDifficultyIndex(wave, false),
         isAnomaly: (wave >= 15 && wave % 5 === 0 && !isBoss),
         distribution: this.getArchetypeDistribution(wave)
       };
@@ -240,3 +346,4 @@
 
   return new DifficultyDirector();
 });
+

@@ -202,3 +202,154 @@ test('Progressive Difficulty Director: Welcoming onboarding, archetype progressi
   const w50Mobile = DifficultyDirector.getWaveConfig(50, 'endless', null, true);
   assert.ok(w50Mobile.concurrentCap <= 18, `Mobile concurrent enemy cap (${w50Mobile.concurrentCap}) must never exceed 18 for performance`);
 });
+
+test('Chrono Energy Economy: Strict bounds, Stasis drain cutoff, and regen delay', () => {
+  const { PlayerVessel } = require('../public/js/entities.js');
+  const player = new PlayerVessel(100, 100);
+
+  // 1. Initial State
+  assert.strictEqual(player.chronoEnergy, 100, 'Initial Chrono Energy must be 100');
+  assert.strictEqual(player.maxChronoEnergy, 100, 'Max Chrono Energy must be 100');
+
+  // 2. Ability expenditure & regen delay
+  const spent = player.consumeEnergy(35);
+  assert.strictEqual(spent, true, 'consumeEnergy should succeed when energy is available');
+  assert.strictEqual(player.chronoEnergy, 65, 'Remaining energy should be exactly 65');
+  assert.strictEqual(player.energyRegenTimer, 1.0, 'Regen delay timer must be set to 1.0 second');
+
+  // 3. Regen must not trigger while regen delay timer > 0
+  player.update(0.5);
+  assert.strictEqual(player.chronoEnergy, 65, 'Energy must not regenerate during delay window');
+  assert.strictEqual(Math.round(player.energyRegenTimer * 10) / 10, 0.5, 'Timer must decrease with dt');
+
+  // 4. Regen begins after delay passes
+  player.update(0.6); // delay clears (0.5 - 0.6 <= 0)
+  assert.ok(player.energyRegenTimer <= 0, 'Regen timer should now be expired');
+  player.update(1.0); // 1 full second of passive regen at 8/s
+  assert.ok(player.chronoEnergy > 65, 'Energy must regenerate after delay');
+
+  // 5. Energy Cap at 100
+  player.addEnergy(500);
+  assert.strictEqual(player.chronoEnergy, 100, 'Energy must never exceed 100 max cap');
+
+  // 6. Insufficient energy prevents activation
+  player.consumeEnergy(95); // 5 energy left
+  assert.strictEqual(player.chronoEnergy, 5);
+  const failedSpend = player.consumeEnergy(20); // 20 required for Hyper-Slash
+  assert.strictEqual(failedSpend, false, 'consumeEnergy must return false when insufficient');
+  assert.strictEqual(player.chronoEnergy, 5, 'Energy must remain unchanged on failed spend');
+
+  // 7. Stasis drain & hard cutoff at 0
+  player.isSlowMo = true;
+  player.update(1.0); // drains 25/s -> 5 - 25 <= 0
+  assert.strictEqual(player.chronoEnergy, 0, 'Energy must stop at 0 and never fall below zero');
+  assert.strictEqual(player.isSlowMo, false, 'Stasis must cut off immediately at 0 energy with no free duration');
+});
+
+test('Skill-Based Parry State Machine: Window, cooldown, and single-reflection guarantee', () => {
+  const { PlayerVessel, EnemyBullet } = require('../public/js/entities.js');
+  const player = new PlayerVessel(100, 100);
+
+  // 1. Initial State
+  assert.strictEqual(player.parryState, 'IDLE', 'Initial parry state must be IDLE');
+
+  // 2. Trigger Parry Window
+  const triggered = player.triggerParry();
+  assert.strictEqual(triggered, true, 'triggerParry must activate when IDLE');
+  assert.strictEqual(player.parryState, 'ACTIVE', 'Parry state must be ACTIVE');
+  assert.strictEqual(player.parryTimer, 0.18, 'Active window must be 180ms');
+
+  // 3. Repeated activation rejected during active window (Holding/Spamming prevented)
+  const spamAttempt = player.triggerParry();
+  assert.strictEqual(spamAttempt, false, 'Cannot re-trigger parry while window is active');
+
+  // 4. Transition to RECOVERY state after 180ms
+  player.update(0.20);
+  assert.strictEqual(player.parryState, 'RECOVERY', 'Parry must enter RECOVERY state after active window');
+  assert.ok(player.parryTimer > 0, 'Recovery timer must be running (300ms)');
+
+  // 5. Re-triggering rejected during recovery
+  const recoveryAttempt = player.triggerParry();
+  assert.strictEqual(recoveryAttempt, false, 'Cannot trigger parry during recovery');
+
+  // 6. Return to IDLE after recovery finishes
+  player.update(0.35);
+  assert.strictEqual(player.parryState, 'IDLE', 'Parry state must return to IDLE after recovery');
+
+  // 7. Single Reflection Guarantee on EnemyBullet
+  const bullet = new EnemyBullet(100, 100, 0, 300, '#ff0055', 20);
+  assert.strictEqual(bullet.isDeflected, false, 'Bullet starts non-deflected');
+  assert.strictEqual(bullet.canBeReflected, true, 'Bullet is eligible for deflection');
+
+  const firstDeflect = bullet.deflect(Math.PI);
+  assert.strictEqual(firstDeflect, true, 'First deflection must succeed');
+  assert.strictEqual(bullet.isDeflected, true, 'Bullet is now marked deflected');
+
+  const secondDeflect = bullet.deflect(0);
+  assert.strictEqual(secondDeflect, false, 'Bullet cannot be deflected a second time');
+});
+
+test('EMP Anti-Boss Lockout: Boss resists continuous stun-locking', () => {
+  const { Enemy } = require('../public/js/entities.js');
+  const boss = new Enemy(200, 200, 'boss', 10);
+  assert.strictEqual(boss.isBoss, true, 'Enemy must be boss');
+  assert.strictEqual(boss.empImmunityTimer, 0, 'Initial immunity timer is 0');
+
+  // First EMP hit
+  boss.empImmunityTimer = 6.0;
+  boss.stunTimer = 0.25;
+
+  assert.strictEqual(boss.empImmunityTimer, 6.0, 'Boss gains 6.0s immunity against subsequent EMP lockouts');
+  assert.strictEqual(boss.stunTimer, 0.25, 'Boss suffers only brief stagger instead of standard 1.8s stun');
+
+  // Attempt second EMP while immune: must not reset or re-stun
+  const isImmune = boss.empImmunityTimer > 0;
+  assert.strictEqual(isImmune, true, 'Boss must report active EMP immunity');
+});
+
+test('Difficulty Model Audit: Exact +5.0 point calibrated increase verified', () => {
+  const DifficultyDirector = require('../public/js/difficulty.js');
+  const audit = DifficultyDirector.getDifficultyAudit();
+
+  assert.strictEqual(audit.targetDeltaMet, true, 'Overall difficulty delta must meet +5.0 target');
+  assert.strictEqual(audit.overallDelta, 5.0, 'Difficulty increase must be exactly 5.0 points');
+  assert.ok(audit.targetMean > audit.baselineMean, 'Target difficulty must exceed baseline');
+
+  // Verify bounded endgame index (never exceeds 100 or causes runaway progression)
+  const w100Index = DifficultyDirector.calculateDifficultyIndex(100, false);
+  assert.ok(w100Index <= 100, 'Endgame difficulty index must remain bounded <= 100');
+});
+
+test('Roguelite Run Upgrades: Meaningful choices, hard caps & no infinite loops', () => {
+  const { AUGMENT_DEFINITIONS } = require('../public/js/upgrades.js');
+  const { PlayerVessel } = require('../public/js/entities.js');
+
+  const temporalEff = AUGMENT_DEFINITIONS.find(a => a.id === 'temporal_efficiency');
+  const feedbackLoop = AUGMENT_DEFINITIONS.find(a => a.id === 'feedback_loop');
+  const glassCannon = AUGMENT_DEFINITIONS.find(a => a.id === 'glass_cannon');
+
+  assert.ok(temporalEff, 'Temporal Efficiency augment must exist');
+  assert.ok(feedbackLoop, 'Feedback Loop augment must exist');
+  assert.ok(glassCannon, 'Glass Cannon augment must exist');
+
+  const player = new PlayerVessel(100, 100);
+
+  // Apply Temporal Efficiency: drain decreases but bounded >= 14
+  temporalEff.apply(player);
+  assert.ok(player.chronoDrainRate < 25, 'Stasis drain must decrease');
+  for (let i = 0; i < 10; i++) temporalEff.apply(player);
+  assert.ok(player.chronoDrainRate >= 14, 'Stasis drain must be capped at min 14 to prevent infinite stasis');
+
+  // Apply Feedback Loop: parry skill bonus increases up to cap 13
+  feedbackLoop.apply(player);
+  assert.strictEqual(player.parrySkillBonus, 9, 'Skill bonus increased from 5 to 9');
+  feedbackLoop.apply(player);
+  assert.strictEqual(player.parrySkillBonus, 13, 'Skill bonus capped at 13');
+
+  // Apply Glass Cannon: +45% slice/primary damage, -25% shield
+  const preDmg = player.sliceDamage;
+  const preShield = player.maxShield;
+  glassCannon.apply(player);
+  assert.strictEqual(player.sliceDamage, preDmg * 1.45, 'Slice damage increased by 45%');
+  assert.strictEqual(player.maxShield, Math.round(preShield * 0.75), 'Max shield reduced by 25%');
+});
