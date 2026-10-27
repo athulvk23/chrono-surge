@@ -419,8 +419,9 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Touch Action Buttons (PULSE, EMP, OVERDRIVE)
+  // Touch Action Buttons (PULSE, PARRY, EMP, OVERDRIVE)
   const btnTouchFire = document.getElementById('btn-touch-fire');
+  const btnTouchParry = document.getElementById('btn-touch-parry');
   const btnTouchEmp = document.getElementById('btn-touch-emp');
   const btnTouchOverdrive = document.getElementById('btn-touch-overdrive');
   let touchFireInterval = null;
@@ -447,6 +448,18 @@ window.addEventListener('DOMContentLoaded', () => {
     btnTouchFire.addEventListener('click', (e) => {
       e.preventDefault();
       fireAction();
+    });
+  }
+
+  if (btnTouchParry) {
+    btnTouchParry.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.chronoAudio.resumeContext();
+      if (game.state === 'PLAYING') game.triggerParry();
+    }, { passive: false });
+    btnTouchParry.addEventListener('click', () => {
+      if (game.state === 'PLAYING') game.triggerParry();
     });
   }
 

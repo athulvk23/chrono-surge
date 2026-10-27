@@ -445,6 +445,15 @@
   box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
 }
 
+.parry-btn {
+  background: radial-gradient(circle, rgba(0, 255, 204, 0.35) 0%, rgba(0, 150, 130, 0.2) 100%);
+  border: 2px solid #00ffcc;
+  color: #fff;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 16px rgba(0, 255, 204, 0.45);
+}
+
 .emp-btn {
   background: radial-gradient(circle, rgba(255, 230, 0, 0.3) 0%, rgba(180, 150, 0, 0.15) 100%);
   border: 2px solid var(--yellow);
