@@ -1044,25 +1044,397 @@ body.high-contrast .skin-row {
   background: #050505;
 }
 
-/* --- RESPONSIVE MOBILE TWEAKS --- */
+/* --- RESPONSIVE MOBILE & TOUCH DESIGN SYSTEM ---
+   Comprehensive support for 320px, 360px, 375px, 390px, 414px, 430px, tablet, and desktop viewports */
+
 @media (max-width: 768px) {
-  .armory-layout {
-    grid-template-columns: 1fr;
+  /* Prevent pull-to-refresh & browser gesture hijacking during active play */
+  html, body, #game-container {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: none;
   }
-  .skin-preview-wrap {
-    padding: 10px;
+
+  /* Safe Area Aware Top Telemetry HUD */
+  .hud-top {
+    position: absolute !important;
+    top: calc(6px + env(safe-area-inset-top)) !important;
+    left: calc(8px + env(safe-area-inset-left)) !important;
+    right: calc(8px + env(safe-area-inset-right)) !important;
+    height: 38px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    padding: 0 10px !important;
+    background: rgba(5, 10, 22, 0.78) !important;
+    border: 1px solid rgba(0, 240, 255, 0.25) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.5) !important;
+    z-index: 30 !important;
   }
-  #skin-preview {
-    width: 160px;
-    height: 160px;
+
+  .hud-box {
+    padding: 2px 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
   }
+
+  .hud-box.time-box,
+  .hud-box.multiplier-box {
+    display: none !important; /* Keep primary combat telemetry readable */
+  }
+
+  .hud-label {
+    font-size: 0.55rem !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  .hud-value {
+    font-size: 0.88rem !important;
+  }
+
+  .hud-pause-btn {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.95rem !important;
+    padding: 0 !important;
+    border-radius: 4px !important;
+  }
+
+  /* Side Trays: Compact badges that do not obstruct combat */
+  .hud-left {
+    position: absolute !important;
+    left: calc(8px + env(safe-area-inset-left)) !important;
+    top: calc(52px + env(safe-area-inset-top)) !important;
+    width: auto !important;
+    z-index: 24 !important;
+  }
+
+  .style-rank-container {
+    padding: 4px 8px !important;
+    background: rgba(6, 12, 24, 0.72) !important;
+    border: 1px solid rgba(0, 240, 255, 0.2) !important;
+    border-radius: 4px !important;
+  }
+
+  .style-rank-title {
+    display: none !important;
+  }
+
+  .style-letter {
+    font-size: 1.15rem !important;
+  }
+
+  .combo-callout {
+    padding: 2px 6px !important;
+  }
+
+  #combo-count {
+    font-size: 1.1rem !important;
+  }
+
+  .hud-right {
+    position: absolute !important;
+    right: calc(8px + env(safe-area-inset-right)) !important;
+    top: calc(52px + env(safe-area-inset-top)) !important;
+    width: auto !important;
+    z-index: 24 !important;
+  }
+
+  .augments-tray {
+    background: rgba(6, 12, 24, 0.72) !important;
+    border: 1px solid rgba(0, 240, 255, 0.2) !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    align-items: center !important;
+  }
+
+  .augments-list {
+    display: none !important; /* Preserves clear view of swarms */
+  }
+
+  /* Centered Bottom Telemetry (Non-colliding capsule between joystick & buttons) */
+  .hud-bottom {
+    position: absolute !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: min(180px, 40vw) !important;
+    z-index: 28 !important;
+    pointer-events: none !important;
+  }
+
+  .core-meters {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 4px !important;
+    padding: 6px 10px !important;
+    background: rgba(6, 12, 24, 0.85) !important;
+    border: 1px solid rgba(0, 240, 255, 0.25) !important;
+    border-radius: 4px !important;
+    backdrop-filter: blur(8px) !important;
+    clip-path: none !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  .meter-group {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .meter-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    font-size: 0.55rem !important;
+    margin-bottom: 2px !important;
+  }
+
+  .meter-track {
+    height: 4px !important;
+  }
+
+  .meter-label, .meter-val {
+    font-size: 0.52rem !important;
+  }
+
+  /* Mobile Touch Controls Placement */
+  .touch-controls {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 35 !important;
+    pointer-events: none !important;
+    touch-action: none !important;
+  }
+
+  .joystick-zone {
+    left: calc(12px + env(safe-area-inset-left)) !important;
+    bottom: calc(14px + env(safe-area-inset-bottom)) !important;
+    width: 125px !important;
+    height: 125px !important;
+  }
+
+  .joystick-base {
+    width: 110px !important;
+    height: 110px !important;
+  }
+
+  .joystick-knob {
+    width: 46px !important;
+    height: 46px !important;
+    top: calc(50% - 23px) !important;
+    left: calc(50% - 23px) !important;
+  }
+
+  .touch-buttons {
+    right: calc(12px + env(safe-area-inset-right)) !important;
+    bottom: calc(14px + env(safe-area-inset-bottom)) !important;
+    gap: 10px !important;
+  }
+
+  .touch-btn {
+    width: 54px !important;
+    height: 54px !important;
+    font-size: 0.65rem !important;
+  }
+
+  .fire-btn {
+    width: 60px !important;
+    height: 60px !important;
+    font-size: 0.72rem !important;
+  }
+
+  .aim-hint {
+    display: none !important;
+  }
+
+  /* Tutorial Banner on Phones */
+  .tutorial-banner {
+    top: calc(52px + env(safe-area-inset-top)) !important;
+    width: min(390px, 94vw) !important;
+    padding: 10px 14px !important;
+  }
+
+  .tutorial-step-title {
+    font-size: 0.75rem !important;
+  }
+
+  .tutorial-step-text {
+    font-size: 0.84rem !important;
+    line-height: 1.3 !important;
+    margin-bottom: 6px !important;
+  }
+
+  /* Responsive Augment Selection Screen */
+  .screen-augment-content {
+    width: min(420px, 95vw) !important;
+    padding: 16px 14px !important;
+    max-height: 92dvh !important;
+    overflow-y: auto !important;
+  }
+
+  .cards-container {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    max-height: 68dvh !important;
+    overflow-y: auto !important;
+    padding-right: 4px !important;
+  }
+
+  .upgrade-card {
+    padding: 12px 14px !important;
+  }
+
+  .upgrade-card-title {
+    font-size: 0.95rem !important;
+  }
+
+  .upgrade-card-desc {
+    font-size: 0.82rem !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Responsive Menus & Modal Panels */
+  .panel-card {
+    width: 96vw !important;
+    max-height: 90dvh !important;
+    padding: 18px 14px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
+  }
+
+  .panel-title {
+    font-size: 1.25rem !important;
+  }
+
+  .briefing-card {
+    width: 96vw !important;
+    max-height: 90dvh !important;
+    padding: 18px 14px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
+  }
+
+  .threat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .threat-card {
+    padding: 12px !important;
+  }
+
+  .threat-does {
+    min-height: auto !important;
+    margin: 8px 0 !important;
+  }
+
+  .skill-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .ach-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .profile-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .core-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .menu-brand .game-title {
+    font-size: clamp(1.8rem, 7vw, 2.8rem) !important;
+  }
+
+  .menu-shell {
+    padding: 16px 12px !important;
+    max-height: 94dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
+  }
+
   .menu-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr) !important;
   }
+
   .desktop-only {
     display: none !important;
   }
-  .panel-card {
-    padding: 18px 16px;
+
+  .armory-layout {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .skin-preview-wrap {
+    padding: 10px !important;
+  }
+
+  #skin-preview {
+    width: 150px !important;
+    height: 150px !important;
+  }
+}
+
+/* Ultra-Narrow Viewports (320px - 360px: iPhone SE 1st gen, Galaxy Fold outer display) */
+@media (max-width: 360px) {
+  .hud-box.kills-box {
+    display: none !important;
+  }
+
+  .joystick-zone {
+    width: 110px !important;
+    height: 110px !important;
+    left: 6px !important;
+  }
+
+  .joystick-base {
+    width: 95px !important;
+    height: 95px !important;
+  }
+
+  .joystick-knob {
+    width: 38px !important;
+    height: 38px !important;
+    top: calc(50% - 19px) !important;
+    left: calc(50% - 19px) !important;
+  }
+
+  .touch-buttons {
+    right: 6px !important;
+    gap: 8px !important;
+  }
+
+  .touch-btn {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 0.6rem !important;
+  }
+
+  .fire-btn {
+    width: 52px !important;
+    height: 52px !important;
+    font-size: 0.65rem !important;
+  }
+
+  .hud-bottom {
+    width: 135px !important;
   }
 }

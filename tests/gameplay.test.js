@@ -107,3 +107,24 @@ test('Skill Tree: Branches define positive cost curves and max ranks', () => {
     assert.ok(progFile.includes(`id: '${b}'`), `Skill tree must include branch ${b}`);
   }
 });
+
+test('Official Reference Sheet: 3-Phase Boss, Archetypes and Pickups', () => {
+  const entitiesFile = fs.readFileSync(path.join(__dirname, '../public/js/entities.js'), 'utf8');
+  const indexFile = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+
+  // Verify 3 Character Archetypes
+  assert.ok(indexFile.includes('01 CORE'), 'Must include 01 Core archetype');
+  assert.ok(indexFile.includes('02 SPECTER'), 'Must include 02 Specter archetype');
+  assert.ok(indexFile.includes('03 NOVA'), 'Must include 03 Nova archetype');
+
+  // Verify 3 Boss Phases in entities
+  assert.ok(entitiesFile.includes('PHASE 1 — AWAKENED CORE'), 'Must implement Phase 1 Awakened Core');
+  assert.ok(entitiesFile.includes('PHASE 2 — ASCENDED FORM'), 'Must implement Phase 2 Ascended Form');
+  assert.ok(entitiesFile.includes('PHASE 3 — FINAL FORM (COSMIC ARCHON)'), 'Must implement Phase 3 Cosmic Archon');
+
+  // Verify Tactical Item Drops from reference
+  const requiredPickups = ['health', 'shield', 'chrono', 'overdrive', 'multiplier', 'shard'];
+  for (const p of requiredPickups) {
+    assert.ok(entitiesFile.includes(`this.type === '${p}'`), `Must support ${p} pickup`);
+  }
+});

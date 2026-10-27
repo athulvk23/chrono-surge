@@ -827,9 +827,25 @@ class ChronoGame {
     this.score += pointsGained;
     this.addStylePoints(80 + this.combo * 15);
 
-    const orbCount = enemy.isBoss ? 25 : (enemy.type === 'dasher' ? 4 : enemy.type === 'phantom' ? 3 : 2);
+    const orbCount = enemy.isBoss ? 16 : (enemy.type === 'dasher' ? 4 : enemy.type === 'phantom' ? 3 : 2);
     for (let i = 0; i < orbCount; i++) {
-      this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1));
+      this.orbs.push(new EnergyOrb(enemy.x + (Math.random() - 0.5) * 30, enemy.y + (Math.random() - 0.5) * 30, 1, 'xp'));
+    }
+
+    // Tactical Item Drops from Official Sci-Fi Reference Sheet
+    if (enemy.isBoss) {
+      this.orbs.push(new EnergyOrb(enemy.x - 30, enemy.y, 1, 'health'));
+      this.orbs.push(new EnergyOrb(enemy.x + 30, enemy.y, 1, 'shield'));
+      this.orbs.push(new EnergyOrb(enemy.x, enemy.y - 30, 1, 'overdrive'));
+      this.orbs.push(new EnergyOrb(enemy.x, enemy.y + 30, 1, 'shard'));
+    } else {
+      const dropRoll = Math.random();
+      if (dropRoll < 0.05) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'health'));
+      else if (dropRoll < 0.10) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'shield'));
+      else if (dropRoll < 0.14) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'chrono'));
+      else if (dropRoll < 0.17) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'overdrive'));
+      else if (dropRoll < 0.20) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'multiplier'));
+      else if (dropRoll < 0.23) this.orbs.push(new EnergyOrb(enemy.x, enemy.y, 1, 'shard'));
     }
 
     if (this.combo >= 2) {
@@ -1321,7 +1337,30 @@ class ChronoGame {
       const orb = this.orbs[i];
       orb.update(dt, this.player.x, this.player.y);
       if (dist(orb.x, orb.y, this.player.x, this.player.y) < this.player.radius + orb.radius) {
-        this.addXp(orb.value);
+        if (orb.type === 'health') {
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, '+25 HP', '#00f0ff', 16, true);
+        } else if (orb.type === 'shield') {
+          this.player.shield = Math.min(this.player.maxShield, this.player.shield + 35);
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, '+35 SHIELD', '#087dff', 16, true);
+        } else if (orb.type === 'chrono') {
+          this.player.chronoEnergy = Math.min(this.player.maxChronoEnergy, this.player.chronoEnergy + 50);
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, 'CHRONO SURGE!', '#00f0ff', 16, true);
+        } else if (orb.type === 'overdrive') {
+          this.player.overdriveCharge = Math.min(100, this.player.overdriveCharge + 25);
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, 'OVERDRIVE +25%', '#ff0055', 16, true);
+        } else if (orb.type === 'multiplier') {
+          this.addStylePoints(250);
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, 'STYLE BOOST!', '#ffe600', 16, true);
+        } else if (orb.type === 'shard') {
+          if (window.progression) {
+            window.progression.profile.shards = (window.progression.profile.shards || 0) + 15;
+            window.progression.saveLocalProfile();
+          }
+          window.particles.addFloatingText(this.player.x, this.player.y - 20, '+15 SHARDS', '#00f0ff', 16, true);
+        } else {
+          this.addXp(orb.value);
+        }
         this.score += 25;
         this.orbs.splice(i, 1);
       } else if (orb.life <= 0) {

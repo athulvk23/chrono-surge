@@ -175,6 +175,26 @@ class ParticleEngine {
     });
   }
 
+  emitRingShockwave(x, y, maxRadius = 140, color = '#a64cff') {
+    this.addShockwave(x, y, maxRadius, color, 30);
+  }
+
+  addGravitySpark(centerX, centerY, color = '#e0aaff') {
+    if (this.particles.length >= this.maxParticles) return;
+    const a = Math.random() * Math.PI * 2;
+    const r = 120 + Math.random() * 80;
+    this.particles.push({
+      x: centerX + Math.cos(a) * r,
+      y: centerY + Math.sin(a) * r,
+      vx: -Math.cos(a) * 4.5,
+      vy: -Math.sin(a) * 4.5,
+      color,
+      size: 3,
+      alpha: 0.8,
+      decay: 0.04
+    });
+  }
+
   // --- FLOATING COMBAT TEXT ---
   addFloatingText(x, y, text, color = '#ffe600', size = 16, isCrit = false) {
     this.floatingTexts.push({

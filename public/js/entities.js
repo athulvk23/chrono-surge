@@ -388,29 +388,32 @@ class PlayerVessel {
     }
     ctx.restore();
 
-    // Hull Geometry varies by Equipped Skin!
-    ctx.fillStyle = '#07101c';
+    // Hull Geometry based on Official Sci-Fi Reference Sheet:
+    // 01 CORE (3-blade Tri-Spiral Shuriken), 02 SPECTER (Twin Dagger Stealth), 03 NOVA (6-point Sunburst Crystal)
+    ctx.fillStyle = '#060d1a';
     ctx.strokeStyle = coreGlow;
     ctx.lineWidth = 2.8;
 
     ctx.beginPath();
     if (skin.hullShape === 'scythe') {
-      // Swept Crimson Scythe Wings
-      ctx.moveTo(this.radius * 1.5, 0);
-      ctx.lineTo(-this.radius * 0.4, -this.radius * 1.25);
-      ctx.lineTo(-this.radius * 1.1, -this.radius * 0.8);
-      ctx.lineTo(-this.radius * 0.5, 0);
-      ctx.lineTo(-this.radius * 1.1, this.radius * 0.8);
-      ctx.lineTo(-this.radius * 0.4, this.radius * 1.25);
+      // 02 SPECTER / VOID REAPER — Aerodynamic twin dagger-blades + needle nose
+      ctx.moveTo(this.radius * 1.65, 0);
+      ctx.lineTo(this.radius * 0.4, -this.radius * 0.35);
+      ctx.lineTo(-this.radius * 0.3, -this.radius * 1.35);
+      ctx.lineTo(-this.radius * 1.15, -this.radius * 0.75);
+      ctx.lineTo(-this.radius * 0.45, 0);
+      ctx.lineTo(-this.radius * 1.15, this.radius * 0.75);
+      ctx.lineTo(-this.radius * 0.3, this.radius * 1.35);
+      ctx.lineTo(this.radius * 0.4, this.radius * 0.35);
     } else if (skin.hullShape === 'valkyrie') {
-      // Twin-lance Solar Valkyrie frame
-      ctx.moveTo(this.radius * 1.4, -this.radius * 0.22);
-      ctx.lineTo(this.radius * 0.5, -this.radius * 0.25);
-      ctx.lineTo(-this.radius * 0.8, -this.radius * 1.15);
-      ctx.lineTo(-this.radius * 0.5, 0);
-      ctx.lineTo(-this.radius * 0.8, this.radius * 1.15);
-      ctx.lineTo(this.radius * 0.5, this.radius * 0.25);
-      ctx.lineTo(this.radius * 1.4, this.radius * 0.22);
+      // 03 NOVA / PULSE VALKYRIE — 6-point Radiant Sunburst Crystalline Star
+      for (let i = 0; i < 12; i++) {
+        const a = (i * Math.PI) / 6;
+        const r = (i % 2 === 0) ? this.radius * 1.55 : this.radius * 0.55;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
     } else if (skin.hullShape === 'phantom') {
       // Diamond Void Stealth Hull
       ctx.moveTo(this.radius * 1.45, 0);
@@ -430,27 +433,35 @@ class PlayerVessel {
       ctx.lineTo(-this.radius * 0.2, this.radius * 1.3);
       ctx.lineTo(this.radius * 0.3, this.radius * 0.6);
     } else {
-      // Default Vanguard / Hyperion Arrowhead
-      ctx.moveTo(this.radius * 1.3, 0);
-      ctx.lineTo(-this.radius * 0.9, -this.radius * 0.9);
-      ctx.lineTo(-this.radius * 0.4, 0);
-      ctx.lineTo(-this.radius * 0.9, this.radius * 0.9);
+      // 01 CORE / VANGUARD (Default) — 3-Blade Curved Tri-Spiral Shuriken Star
+      for (let i = 0; i < 3; i++) {
+        const baseAngle = (i * Math.PI * 2) / 3;
+        const tipX = Math.cos(baseAngle) * this.radius * 1.55;
+        const tipY = Math.sin(baseAngle) * this.radius * 1.55;
+        const curveX = Math.cos(baseAngle + 0.55) * this.radius * 0.85;
+        const curveY = Math.sin(baseAngle + 0.55) * this.radius * 0.85;
+        const notchX = Math.cos(baseAngle + (Math.PI / 3)) * this.radius * 0.42;
+        const notchY = Math.sin(baseAngle + (Math.PI / 3)) * this.radius * 0.42;
+        if (i === 0) ctx.moveTo(tipX, tipY);
+        else ctx.lineTo(tipX, tipY);
+        ctx.quadraticCurveTo(curveX, curveY, notchX, notchY);
+      }
     }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Glowing core crystal
+    // Inner glowing core ring & central crystal
+    ctx.strokeStyle = skin.secondary || '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius * 0.45, 0, Math.PI * 2);
+    ctx.stroke();
+
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = skin.secondary || coreGlow;
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    ctx.arc(0, 0, 8, 0, Math.PI * 2);
-    ctx.stroke();
 
     ctx.restore();
   }
@@ -713,42 +724,98 @@ class Enemy {
 
       case 'boss':
         this.phaseTimer += dt;
-        this.laserAngle += 0.9 * dt;
+        this.laserAngle += 1.05 * dt;
 
-        this.x += Math.cos(toPlayerAngle) * (this.speed * 0.6) * dt;
-        this.y += Math.sin(toPlayerAngle) * (this.speed * 0.6) * dt;
-
-        if (this.phaseTimer > 4.0) {
-          this.attackPhase = (this.attackPhase + 1) % 3;
+        // Dynamic 3-Phase transitions based on Boss Health (Reference Sheet: Awakened Core -> Ascended Form -> Final Form)
+        const hpRatio = this.hp / this.maxHp;
+        const targetPhase = hpRatio > 0.66 ? 0 : (hpRatio > 0.33 ? 1 : 2);
+        if (targetPhase !== this.attackPhase) {
+          this.attackPhase = targetPhase;
           this.phaseTimer = 0;
+          if (window.particles) {
+            window.particles.addTrauma(0.65);
+            window.particles.emitRingShockwave(this.x, this.y, 160, this.attackPhase === 2 ? '#ff0077' : '#a64cff');
+          }
+          if (window.chronoAudio) window.chronoAudio.playOverdriveDetonate();
         }
 
-        if (this.attackPhase === 0 && Math.floor(this.phaseTimer * 10) % 15 === 0) {
-          const bulletCount = this.wave >= 40 ? 8 : this.wave >= 20 ? 10 : 12;
-          for (let i = 0; i < bulletCount; i++) {
-            const bAngle = (i / bulletCount) * Math.PI * 2 + this.laserAngle;
-            bullets.push(new EnemyBullet(this.x, this.y, bAngle, 240, '#ff0055', 18));
+        // Tracking movement towards arena center / player
+        const bossSpeed = this.speed * (this.attackPhase === 2 ? 0.85 : 0.65);
+        this.x += Math.cos(toPlayerAngle) * bossSpeed * dt;
+        this.y += Math.sin(toPlayerAngle) * bossSpeed * dt;
+
+        // Attack cycle within current phase
+        // PHASE 1 — AWAKENED CORE: Laser Sweeps, Spiral Orbs & Minions
+        if (this.attackPhase === 0) {
+          const tick = Math.floor(this.phaseTimer * 10);
+          if (tick % 16 === 0 && tick !== this.lastBossTick) {
+            this.lastBossTick = tick;
+            // Radial bullet sweep
+            const count = 10;
+            for (let i = 0; i < count; i++) {
+              const bAngle = (i / count) * Math.PI * 2 + this.laserAngle;
+              bullets.push(new EnemyBullet(this.x, this.y, bAngle, 220, '#ff174f', 16));
+            }
+          }
+          if (tick % 8 === 0 && tick !== this.lastBossTick2) {
+            this.lastBossTick2 = tick;
+            // Spiral orbs
+            const orbAngle = this.laserAngle * 2.2;
+            const b = new EnemyBullet(this.x, this.y, orbAngle, 240, '#a64cff', 18);
+            b.type = 'orb';
+            bullets.push(b);
           }
         }
-        if (this.attackPhase === 1 && Math.floor(this.phaseTimer * 10) % 4 === 0) {
-          const b = new EnemyBullet(this.x, this.y, toPlayerAngle + (Math.random() - 0.5) * 0.3, 400, '#ffe600', 16);
-          b.type = 'wave';
-          b.radius = 7;
-          bullets.push(b);
+
+        // PHASE 2 — ASCENDED FORM: Spike Rings, Cross Lasers & Slicing Waves
+        if (this.attackPhase === 1) {
+          const tick = Math.floor(this.phaseTimer * 10);
+          if (tick % 12 === 0 && tick !== this.lastBossTick) {
+            this.lastBossTick = tick;
+            // Slicing crescent waves
+            for (let k = -1; k <= 1; k++) {
+              const b = new EnemyBullet(this.x, this.y, toPlayerAngle + k * 0.28, 380, '#ffe600', 20);
+              b.type = 'wave';
+              b.radius = 7;
+              bullets.push(b);
+            }
+          }
+          if (tick % 24 === 0 && tick !== this.lastBossTick2) {
+            this.lastBossTick2 = tick;
+            // Cardinal 4-way cross laser barrage
+            for (let c = 0; c < 4; c++) {
+              const ca = this.laserAngle + (c * Math.PI) / 2;
+              const b = new EnemyBullet(this.x, this.y, ca, 280, '#d9a7ff', 18);
+              b.type = 'orb';
+              bullets.push(b);
+            }
+          }
         }
+
+        // PHASE 3 — FINAL FORM (COSMIC ARCHON): Black Hole Vortex & Orbital Screen-Wide Lasers
         if (this.attackPhase === 2) {
           const tick = Math.floor(this.phaseTimer * 12);
-          if (tick % 3 === 0 && tick !== this.lastBossTick) {
+          // Gravitational pull towards boss (Black Hole Singularity)
+          const p = window.chronoGame && window.chronoGame.player;
+          if (p && dist(p.x, p.y, this.x, this.y) < 650) {
+            const pullAngle = Math.atan2(this.y - p.y, this.x - p.x);
+            p.vx += Math.cos(pullAngle) * 220 * dt;
+            p.vy += Math.sin(pullAngle) * 220 * dt;
+            if (Math.random() < 0.25 && window.particles) {
+              window.particles.addGravitySpark(this.x, this.y, '#e0aaff');
+            }
+          }
+
+          if (tick % 5 === 0 && tick !== this.lastBossTick) {
             this.lastBossTick = tick;
-            const base = this.laserAngle * 1.7;
-            for (let k = 0; k < 2; k++) {
-              const a = base + k * ((Math.PI * 2) / 3);
-              const b = new EnemyBullet(this.x, this.y, a, 210 + k * 18, '#a64cff', 20);
-              b.type = 'orb';
-              b.radius = 8;
+            // Screen-wide swirling homing void seekers
+            for (let s = 0; s < 2; s++) {
+              const sa = this.laserAngle * 1.8 + s * Math.PI;
+              const b = new EnemyBullet(this.x, this.y, sa, 260, '#ff0055', 22);
+              b.type = 'seeker';
               b.homing = true;
-              b.turnRate = 0.65;
-              b.life = 5.5;
+              b.turnRate = 0.85;
+              b.life = 4.5;
               bullets.push(b);
             }
           }
@@ -920,30 +987,132 @@ class Enemy {
         ctx.fill();
         break;
       case 'boss':
-        ctx.strokeStyle = '#a64cff';
-        for (let layer = 0; layer < 3; layer++) {
-          const rr = this.radius * (1 + layer * 0.22);
-          ctx.rotate(layer * 0.25);
-          ctx.beginPath();
-          for (let i = 0; i < 16; i++) {
-            const a = (i / 16) * Math.PI * 2;
-            const r = i % 2 ? rr * 0.64 : rr;
-            const x = Math.cos(a) * r;
-            const y = Math.sin(a) * r;
-            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        // Official Sci-Fi Reference Sheet: 3-Phase Boss Silhouettes
+        if (this.attackPhase === 0) {
+          // PHASE 1 — AWAKENED CORE: Fractured crystalline violet cluster + central pulsing eye
+          ctx.strokeStyle = '#a64cff';
+          ctx.lineWidth = 3;
+          for (let layer = 0; layer < 2; layer++) {
+            const rr = this.radius * (1 + layer * 0.28);
+            ctx.rotate(layer * 0.35 + Date.now() * 0.0008);
+            ctx.beginPath();
+            for (let i = 0; i < 12; i++) {
+              const a = (i / 12) * Math.PI * 2;
+              const r = i % 2 ? rr * 0.62 : rr;
+              const x = Math.cos(a) * r;
+              const y = Math.sin(a) * r;
+              i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
           }
+          // Glowing violet eye
+          ctx.fillStyle = '#d9a7ff';
+          ctx.beginPath();
+          ctx.arc(0, 0, 16 + Math.sin(Date.now() * 0.008) * 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (this.attackPhase === 1) {
+          // PHASE 2 — ASCENDED FORM: Winged Crystalline Deity with 4 spreading energy wings
+          ctx.strokeStyle = '#d9a7ff';
+          ctx.lineWidth = 3;
+          // 4 Spreading Crystal Wings
+          for (let w = -1; w <= 1; w += 2) {
+            // Upper Wing
+            ctx.beginPath();
+            ctx.moveTo(0, -this.radius * 0.3);
+            ctx.lineTo(w * this.radius * 1.8, -this.radius * 1.4);
+            ctx.lineTo(w * this.radius * 1.3, -this.radius * 0.4);
+            ctx.lineTo(w * this.radius * 1.7, 0);
+            ctx.lineTo(0, this.radius * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            // Lower Wing
+            ctx.beginPath();
+            ctx.moveTo(0, this.radius * 0.2);
+            ctx.lineTo(w * this.radius * 1.4, this.radius * 1.2);
+            ctx.lineTo(w * this.radius * 0.8, this.radius * 0.5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+          // Central Core Chasis & Crown
+          ctx.beginPath();
+          ctx.moveTo(0, -this.radius * 1.5);
+          ctx.lineTo(this.radius * 0.5, -this.radius * 0.2);
+          ctx.lineTo(0, this.radius * 1.2);
+          ctx.lineTo(-this.radius * 0.5, -this.radius * 0.2);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
+
+          ctx.fillStyle = '#ff3388';
+          ctx.beginPath();
+          ctx.arc(0, 0, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(0, 0, 5, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // PHASE 3 — FINAL FORM (COSMIC ARCHON): Celestial Crown, Floating Halo Ring & 6 Grand Crystal Wings
+          // Floating Cosmic Halo Ring
+          ctx.save();
+          ctx.strokeStyle = '#ff0077';
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([12, 8]);
+          ctx.beginPath();
+          ctx.arc(0, 0, this.radius * 1.95, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+
+          // 6 Multi-tier Wing Spans
+          ctx.strokeStyle = '#e0aaff';
+          ctx.lineWidth = 3.2;
+          for (let w = -1; w <= 1; w += 2) {
+            ctx.beginPath();
+            ctx.moveTo(0, -this.radius * 0.5);
+            ctx.lineTo(w * this.radius * 2.2, -this.radius * 1.6);
+            ctx.lineTo(w * this.radius * 1.6, -this.radius * 0.6);
+            ctx.lineTo(w * this.radius * 2.0, 0);
+            ctx.lineTo(w * this.radius * 1.5, this.radius * 0.8);
+            ctx.lineTo(w * this.radius * 1.8, this.radius * 1.5);
+            ctx.lineTo(0, this.radius * 0.8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // Celestial Crown & Singularity Core
+          ctx.beginPath();
+          ctx.moveTo(0, -this.radius * 1.85);
+          ctx.lineTo(this.radius * 0.6, -this.radius * 0.4);
+          ctx.lineTo(this.radius * 0.3, this.radius * 1.35);
+          ctx.lineTo(0, this.radius * 0.9);
+          ctx.lineTo(-this.radius * 0.3, this.radius * 1.35);
+          ctx.lineTo(-this.radius * 0.6, -this.radius * 0.4);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Swirling Dark Matter Singularity
+          ctx.fillStyle = '#ff0055';
+          ctx.shadowColor = '#ff0077';
+          ctx.shadowBlur = 25;
+          ctx.beginPath();
+          ctx.arc(0, 0, 18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(0, 0, 6, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.fillStyle = '#d9a7ff';
-        ctx.beginPath();
-        ctx.arc(0, 0, 17 + Math.sin(Date.now() * 0.008) * 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, Math.PI * 2);
-        ctx.fill();
         break;
     }
 
@@ -1162,22 +1331,23 @@ class EnemyBullet {
   }
 }
 
-// --- XP / CHRONO COLLECTIBLE ORBS ---
+// --- COMBAT PICKUPS & XP COLLECTIBLES (Official Sci-Fi Reference Sheet) ---
 class EnergyOrb {
-  constructor(x, y, value = 1) {
+  constructor(x, y, value = 1, type = 'xp') {
     this.x = x;
     this.y = y;
     this.vx = (Math.random() - 0.5) * 60;
     this.vy = (Math.random() - 0.5) * 60;
-    this.radius = 5;
+    this.radius = type === 'xp' ? 5.5 : 8.5;
     this.value = value;
-    this.life = 15;
+    this.type = type;
+    this.life = 18;
   }
 
   update(dt, playerX, playerY) {
     const d = dist(this.x, this.y, playerX, playerY);
-    if (d < 220) {
-      const pull = (1 - d / 220) * 800;
+    if (d < 240) {
+      const pull = (1 - d / 240) * 850;
       const angle = Math.atan2(playerY - this.y, playerX - this.x);
       this.vx += Math.cos(angle) * pull * dt;
       this.vy += Math.sin(angle) * pull * dt;
@@ -1192,12 +1362,115 @@ class EnergyOrb {
 
   render(ctx) {
     ctx.save();
-    ctx.fillStyle = '#ffe600';
-    ctx.shadowColor = '#ffe600';
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.translate(this.x, this.y);
+
+    if (this.type === 'health') {
+      // Health: Cyan Medical Cross
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#00f0ff';
+      const w = 3.5, l = 9;
+      ctx.fillRect(-w / 2, -l / 2, w, l);
+      ctx.fillRect(-l / 2, -w / 2, l, w);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-w / 2, -l / 2, w, l);
+      ctx.strokeRect(-l / 2, -w / 2, l, w);
+    } else if (this.type === 'shield') {
+      // Shield: Concentric Azure Barrier Sphere
+      ctx.shadowColor = '#087dff';
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = '#087dff';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(8, 125, 255, 0.45)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'chrono') {
+      // Chrono Charge: Cyan Stopwatch Dial
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // Dial needle
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      const na = Date.now() * 0.006;
+      ctx.lineTo(Math.cos(na) * 5, Math.sin(na) * 5);
+      ctx.stroke();
+    } else if (this.type === 'overdrive') {
+      // Overdrive: Crimson Energy Diamond
+      ctx.shadowColor = '#ff0055';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ff0055';
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(7, 0);
+      ctx.lineTo(0, 8);
+      ctx.lineTo(-7, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'multiplier') {
+      // Multiplier: Golden 4-point Star
+      ctx.shadowColor = '#ffe600';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffe600';
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        const r = i % 2 ? 3.5 : 8;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else if (this.type === 'shard') {
+      // Shard: Isometric Glowing Cyan 3D Cube
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 1.6;
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.35)';
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(6, -3.5);
+      ctx.lineTo(6, 3.5);
+      ctx.lineTo(0, 7);
+      ctx.lineTo(-6, 3.5);
+      ctx.lineTo(-6, -3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -7); ctx.lineTo(0, 7);
+      ctx.moveTo(0, 0); ctx.lineTo(6, -3.5);
+      ctx.moveTo(0, 0); ctx.lineTo(-6, -3.5);
+      ctx.stroke();
+    } else {
+      // XP: Quantum Radiant Orb
+      ctx.fillStyle = '#ffe600';
+      ctx.shadowColor = '#ffe600';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 }
