@@ -501,24 +501,26 @@ class ChronoGame {
     return this.firePrimaryWeapon();
   }
 
-  // --- ENDLESS SURVIVAL WAVE DIRECTOR ---
+  // --- PROGRESSIVE DIFFICULTY & WAVE DIRECTOR ---
   getWaveProfile() {
-    const w = this.wave;
-    const chapter = Math.floor((w - 1) / 10);
-    const within = (w - 1) % 10;
-    const count = Math.min(72, 3 + Math.floor(w * 0.42) + Math.floor(within * 0.28) + chapter);
-    let speedMult = 1 + Math.min(1.15, chapter * 0.12 + within * 0.010);
-    if (this.gameMode === 'daily' && this.dailyConfig?.modifier?.id === 'overclocked_swarms') {
-      speedMult *= 1.2;
+    if (window.DifficultyDirector) {
+      return window.DifficultyDirector.getWaveConfig(this.wave, this.gameMode, this.dailyConfig, this.isMobile);
     }
-    const attackMult = 1 + Math.min(1.45, chapter * 0.13 + within * 0.012);
-    const eliteChance = w < 15 ? 0 : Math.min(0.24, 0.018 + Math.max(0, w - 15) * 0.0028);
-    const hazardLevel = w < 21 ? 0 : Math.min(8, 1 + Math.floor((w - 21) / 12));
+    const w = this.wave;
     return {
-      count, speedMult, attackMult, eliteChance, hazardLevel,
-      chapter, within,
-      boss: w >= 10 && w % 10 === 0,
-      anomaly: w >= 21 && w % 5 === 0
+      wave: w,
+      totalEnemies: Math.min(36, 4 + Math.floor(w * 0.8)),
+      concurrentCap: Math.min(this.isMobile ? 16 : 22, 5 + Math.floor(w * 0.5)),
+      initialSpawnCount: Math.min(4, 2 + Math.floor(w * 0.4)),
+      spawnInterval: Math.max(0.9, 2.0 - w * 0.05),
+      speedMult: 1.0,
+      attackMult: 1.0,
+      hpMult: 1.0,
+      eliteChance: w < 4 ? 0 : 0.1,
+      hazardLevel: w < 15 ? 0 : 1,
+      isBoss: w >= 10 && w % 10 === 0,
+      bossTier: Math.max(1, Math.floor(w / 10)),
+      isAnomaly: w >= 15 && w % 5 === 0 && (w % 10 !== 0)
     };
   }
 
@@ -537,18 +539,61 @@ class ChronoGame {
     return { x, y };
   }
 
+  spawnSingleEnemy(config = this.waveConfig) {
+    if (this.pendingSpawns <= 0) return;
+    const pos = this.spawnAtEdge();
+    let type = 'hunter';
+    if (window.DifficultyDirector) {
+      type = window.DifficultyDirector.pickEnemyType(this.wave, this.rng);
+    } else {
+      if (this.wave >= 4 && this.rng() > 0.75) type = 'orbiter';
+      if (this.wave >= 6 && this.rng() > 0.85) type = 'dasher';
+      if (this.wave >= 9 && this.rng() > 0.90) type = 'phantom';
+    }
+
+    const enemy = new Enemy(pos.x, pos.y, type, this.wave);
+    enemy.speed *= (config?.speedMult || 1.0);
+    enemy.attackSpeedMult = (config?.attackMult || 1.0);
+    enemy.hp *= (config?.hpMult || 1.0);
+    enemy.maxHp = enemy.hp;
+
+    if (this.rng() < (config?.eliteChance || 0) && !enemy.isBoss) {
+      enemy.isElite = true;
+      enemy.hp *= 1.65;
+      enemy.maxHp = enemy.hp;
+      enemy.speed *= 1.15;
+      enemy.scoreVal = Math.round(enemy.scoreVal * 2.2);
+    }
+
+    this.enemies.push(enemy);
+    this.pendingSpawns--;
+  }
+
+  updateEnemySpawning(dt) {
+    if (this.waveState !== 'ACTIVE' || this.isBossWave || this.pendingSpawns <= 0) return;
+    this.spawnTimer = (this.spawnTimer || 0) + dt;
+    const interval = this.waveConfig?.spawnInterval || 1.6;
+    const cap = this.waveConfig?.concurrentCap || (this.isMobile ? 16 : 22);
+
+    if (this.spawnTimer >= interval && this.enemies.length < cap) {
+      this.spawnTimer = 0;
+      this.spawnSingleEnemy(this.waveConfig);
+    }
+  }
+
   spawnWaveGroup() {
-    const profile = this.getWaveProfile();
+    const config = this.getWaveProfile();
+    this.waveConfig = config;
     this.waveState = 'ACTIVE';
-    this.isBossWave = profile.boss;
+    this.isBossWave = config.isBoss;
     this.waveMutation = 'NONE';
     this.hazards = [];
     this.arenaAttacks = [];
     this.arenaDistortion = Math.min(1, Math.max(0, (this.wave - 10) / 35));
 
-    if (profile.boss) {
+    if (config.isBoss) {
       this.bossHud.classList.remove('hidden');
-      const bossTier = Math.max(1, Math.floor(this.wave / 10));
+      const bossTier = config.bossTier || Math.max(1, Math.floor(this.wave / 10));
       this.bossName.textContent = `APEX OVERLORD // TIER ${bossTier}`;
       if (this.bossBarFill) this.bossBarFill.style.width = '100%';
       const boss = new Enemy(this.width / 2, -70, 'boss', this.wave);
@@ -558,50 +603,40 @@ class ChronoGame {
       this.enemies.push(boss);
       this.bossRef = boss;
       this.waveTotalEnemies = 1;
+      this.pendingSpawns = 0;
       window.particles.addFloatingText(this.width / 2, this.height / 2, `⚠ APEX OVERLORD // WAVE ${this.wave} ⚠`, '#ff0055', 28, true);
       window.particles.addTrauma(0.7);
     } else {
       this.bossHud.classList.add('hidden');
       this.bossRef = null;
+      this.pendingSpawns = config.totalEnemies;
+      this.waveTotalEnemies = config.totalEnemies;
+      this.spawnTimer = 0;
 
-      for (let i = 0; i < profile.count; i++) {
-        const pos = this.spawnAtEdge();
-        const r = this.rng();
-        let type = 'hunter';
-        if (this.wave >= 4 && r > 0.76) type = 'orbiter';
-        if (this.wave >= 6 && r > 0.86) type = 'dasher';
-        if (this.wave >= 9 && r > 0.92) type = 'phantom';
-
-        if (this.wave < 4) type = 'hunter';
-        if (this.wave === 4 && i > 0 && type !== 'hunter') type = 'hunter';
-        if (this.wave === 6 && i > 1 && type === 'dasher') type = 'hunter';
-
-        const enemy = new Enemy(pos.x, pos.y, type, this.wave);
-        enemy.speed *= profile.speedMult;
-        enemy.attackSpeedMult = profile.attackMult;
-
-        if (this.wave >= 4 && this.rng() < profile.eliteChance && !enemy.isBoss) {
-          enemy.isElite = true;
-          enemy.hp *= 1.75;
-          enemy.maxHp = enemy.hp;
-          enemy.speed *= 1.18;
-          enemy.scoreVal = Math.round(enemy.scoreVal * 2.2);
-        }
-        this.enemies.push(enemy);
+      // Spawn initial cluster (e.g. 2 in wave 1, 3 in wave 2)
+      const initialCount = Math.min(config.initialSpawnCount || 3, this.pendingSpawns);
+      for (let i = 0; i < initialCount; i++) {
+        this.spawnSingleEnemy(config);
       }
-      this.waveTotalEnemies = Math.max(1, this.enemies.length);
+
+      // Early welcoming guidance for new players
+      if (this.wave === 1 && !window.progression?.profile?.tutorialCompleted) {
+        window.particles.addFloatingText(this.width / 2, 130, 'WASD TO MANEUVER // LEFT CLICK TO SLICE', '#00f0ff', 18, true);
+      } else if (this.wave === 2 && !window.progression?.profile?.tutorialCompleted) {
+        window.particles.addFloatingText(this.width / 2, 130, 'SPACE TO HYPER-SLASH // EARLY AUGMENT INBOUND', '#ffe600', 18, true);
+      }
     }
 
-    if (!profile.boss && profile.anomaly) {
+    if (!config.isBoss && config.isAnomaly) {
       const mutations = ['LASER GRID', 'ENERGY MINES', 'VOID FIELDS', 'ROTATING BEAMS', 'BLACK HOLE'];
       this.waveMutation = mutations[Math.floor(this.wave / 5 - 1) % mutations.length];
-      this.createHazards(profile.hazardLevel);
+      this.createHazards(config.hazardLevel);
       window.particles.addFloatingText(this.width / 2, 110, `ARENA MUTATION // ${this.waveMutation}`, '#a64cff', 18, true);
-    } else if (!profile.boss && profile.hazardLevel > 0 && this.wave % 3 === 0) {
+    } else if (!config.isBoss && config.hazardLevel > 0 && this.wave % 3 === 0) {
       this.waveMutation = 'HAZARD SURGE';
-      this.createHazards(profile.hazardLevel);
+      this.createHazards(config.hazardLevel);
     }
-    if (profile.boss) {
+    if (config.isBoss) {
       this.createBossArenaPattern(Math.max(1, Math.floor(this.wave / 8)));
     }
   }
@@ -858,8 +893,9 @@ class ChronoGame {
     this.addStylePoints(80 + this.combo * 15);
 
     const orbCount = enemy.isBoss ? 16 : (enemy.type === 'dasher' ? 4 : enemy.type === 'phantom' ? 3 : 2);
+    const xpVal = (this.wave <= 2) ? 3 : 1;
     for (let i = 0; i < orbCount; i++) {
-      this.orbs.push(new EnergyOrb(enemy.x + (Math.random() - 0.5) * 30, enemy.y + (Math.random() - 0.5) * 30, 1, 'xp'));
+      this.orbs.push(new EnergyOrb(enemy.x + (Math.random() - 0.5) * 30, enemy.y + (Math.random() - 0.5) * 30, xpVal, 'xp'));
     }
 
     // Tactical Item Drops from Official Sci-Fi Reference Sheet
@@ -1402,9 +1438,10 @@ class ChronoGame {
     this.updateHazards(dt);
     this.updateArenaAttacks(dt);
 
-    // 7. Endless wave progression
+    // 7. Progressive wave spawning & progression
+    this.updateEnemySpawning(dt);
     this.waveTimer += dt;
-    if (this.enemies.length === 0 && this.waveState === 'ACTIVE') {
+    if (this.enemies.length === 0 && (!this.pendingSpawns || this.pendingSpawns <= 0) && this.waveState === 'ACTIVE') {
       if (this.gameMode !== 'tutorial' || this.tutorialStepIdx === 9) {
         this.beginWaveIntermission();
       }

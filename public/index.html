@@ -385,31 +385,92 @@
       </div>
     </div>
 
-    <!-- ================= PROFILE ================= -->
+    <!-- ================= PROFILE & OPERATIVE AUTHENTICATION ================= -->
     <div id="screen-profile" class="ui-screen hidden panel-screen">
       <div class="cyber-card panel-card wide">
-        <div class="panel-head"><h2 class="panel-title">Profile</h2><button class="panel-close" data-close>Back</button></div>
+        <div class="panel-head"><h2 class="panel-title">Operative Identity & Cloud Sync</h2><button class="panel-close" data-close>Back</button></div>
         <div class="profile-layout">
           <div>
-            <label class="field"><span>Callsign</span><input id="profile-name" maxlength="24"></label>
-            <button id="btn-save-name" class="cyber-btn secondary-btn small">Save name</button>
+            <label class="field"><span>Public Callsign</span><input id="profile-name" maxlength="24"></label>
+            <button id="btn-save-name" class="cyber-btn secondary-btn small">Save callsign</button>
             <div id="profile-stats" class="profile-stats"></div>
           </div>
           <div class="account-box">
-            <h3 class="sub-title">Cloud account</h3>
-            <p id="account-status" class="panel-sub">Playing as guest. Progress is saved on this device only.</p>
-            <div id="account-forms">
-              <label class="field"><span>Username</span><input id="auth-user" maxlength="20" autocomplete="username"></label>
-              <label class="field"><span>Password</span><input id="auth-pass" type="password" maxlength="128" autocomplete="current-password"></label>
-              <div class="action-row left">
-                <button id="btn-login" class="cyber-btn primary-btn small">Sign in</button>
-                <button id="btn-register" class="cyber-btn secondary-btn small">Create account</button>
-              </div>
-              <p class="panel-sub small">Creating an account uploads your guest progress. Password recovery is not available — keep your password safe.</p>
+            <div class="account-header">
+              <h3 class="sub-title">Cloud Operative Profile</h3>
+              <span id="account-status-badge" class="sync-pill status-local">GUEST MODE</span>
             </div>
-            <button id="btn-logout" class="cyber-btn secondary-btn small hidden">Sign out</button>
+            <p id="account-status" class="panel-sub">Playing as guest. Progress is saved on this device only.</p>
+
+            <!-- Signed Out Auth Terminal -->
+            <div id="account-forms">
+              <button id="btn-google-auth" class="cyber-btn secondary-btn google-btn">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.37 7.32 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.32 0 3.25 2.63 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+
+              <div class="auth-divider"><span>OR OPERATIVE CREDENTIALS</span></div>
+
+              <div class="auth-mode-tabs" role="tablist">
+                <button id="tab-auth-login" class="tab-chip active" type="button">Sign In</button>
+                <button id="tab-auth-register" class="tab-chip" type="button">Create Account</button>
+                <button id="tab-auth-forgot" class="tab-chip" type="button">Forgot Key</button>
+              </div>
+
+              <!-- Sign In Form -->
+              <div id="form-signin" class="auth-form-pane">
+                <label class="field"><span>Callsign or Email</span><input id="auth-user" maxlength="48" autocomplete="username" placeholder="OPERATIVE-CALLSIGN"></label>
+                <label class="field"><span>Security Key</span><input id="auth-pass" type="password" maxlength="128" autocomplete="current-password" placeholder="••••••••"></label>
+                <div class="action-row left">
+                  <button id="btn-login" class="cyber-btn primary-btn small">Sign In</button>
+                  <button id="btn-continue-guest-1" class="cyber-btn secondary-btn small" type="button">Keep Playing as Guest</button>
+                </div>
+              </div>
+
+              <!-- Register Form with Real-Time Unique Callsign Availability Check -->
+              <div id="form-register" class="auth-form-pane hidden">
+                <label class="field">
+                  <div class="field-label-row"><span>Unique Callsign</span><span id="callsign-avail-badge" class="avail-badge">Check availability</span></div>
+                  <input id="reg-user" maxlength="20" autocomplete="username" placeholder="CHRONO-PILOT">
+                </label>
+                <label class="field"><span>Recovery Email (Optional)</span><input id="reg-email" type="email" maxlength="64" autocomplete="email" placeholder="pilot@sector.io"></label>
+                <label class="field"><span>Security Key (min 6 chars)</span><input id="reg-pass" type="password" maxlength="128" autocomplete="new-password" placeholder="••••••••"></label>
+                <div class="action-row left">
+                  <button id="btn-register" class="cyber-btn primary-btn small">Create Account</button>
+                  <button id="btn-continue-guest-2" class="cyber-btn secondary-btn small" type="button">Keep Playing as Guest</button>
+                </div>
+                <p class="panel-sub small">Your existing local guest progress (shards, level, high score, skins) will automatically migrate into your new account.</p>
+              </div>
+
+              <!-- Forgot Password Form -->
+              <div id="form-forgot" class="auth-form-pane hidden">
+                <p class="panel-sub small">Enter your callsign or recovery email to initiate operative account recovery.</p>
+                <label class="field"><span>Callsign or Email</span><input id="forgot-ident" maxlength="64" placeholder="PILOT or pilot@domain.com"></label>
+                <div class="action-row left">
+                  <button id="btn-forgot-submit" class="cyber-btn primary-btn small">Dispatch Recovery</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Signed In Card -->
+            <div id="account-signed-in" class="signed-in-box hidden">
+              <div class="user-id-row"><span>Verified Operative:</span><strong id="user-display-name">---</strong></div>
+              <div class="user-id-row"><span>Operative ID:</span><code id="user-account-id">---</code></div>
+              <div class="action-row left">
+                <button id="btn-sync-now" class="cyber-btn primary-btn small">Sync Progress Now</button>
+                <button id="btn-logout" class="cyber-btn secondary-btn small">Sign Out</button>
+              </div>
+            </div>
+
             <div id="auth-error" class="form-error" role="alert"></div>
-            <h3 class="sub-title">Recent runs</h3>
+            <div id="auth-success" class="form-success" role="status"></div>
+
+            <h3 class="sub-title" style="margin-top: 24px;">Recent Verified Runs</h3>
             <div id="run-history" class="run-history"></div>
           </div>
         </div>
@@ -461,6 +522,9 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/difficulty.js"></script>
   <script src="js/progression.js"></script>
   <script src="js/audio.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>

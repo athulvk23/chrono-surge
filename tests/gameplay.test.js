@@ -161,3 +161,44 @@ test('Menu State Clean-Up & Mobile Performance: returnToTitle and mobile optimiz
   // CSS performance checks
   assert.ok(!styleFile.includes('#three-arena { filter:'), 'style.css must not use heavy CSS filters on WebGL canvas');
 });
+
+test('Progressive Difficulty Director: Welcoming onboarding, archetype progression & bounded endless scaling', () => {
+  const DifficultyDirector = require('../public/js/difficulty.js');
+  assert.ok(DifficultyDirector, 'DifficultyDirector module must be loaded');
+
+  // Wave 1: Welcoming Onboarding
+  const w1 = DifficultyDirector.getWaveConfig(1, 'endless', null, false);
+  assert.strictEqual(w1.distribution.hunter, 1.0, 'Wave 1 must be 100% hunters');
+  assert.ok(w1.speedMult <= 1.0, 'Wave 1 speed multiplier must be baseline or lower');
+  assert.ok(w1.concurrentCap <= 6, 'Wave 1 concurrent max must be gentle');
+
+  // Mobile Onboarding concurrent cap
+  const w1Mobile = DifficultyDirector.getWaveConfig(1, 'endless', null, true);
+  assert.ok(w1Mobile.concurrentCap <= 6, 'Mobile onboarding must cap concurrent enemies');
+
+  // Wave 4: Skill Acquisition (Orbiters)
+  const w4 = DifficultyDirector.getWaveConfig(4, 'endless', null, false);
+  assert.ok(w4.distribution.orbiter > 0, 'Wave 4 must introduce Orbiters');
+
+  // Wave 6: First Challenge (Dashers)
+  const w6 = DifficultyDirector.getWaveConfig(6, 'endless', null, false);
+  assert.ok(w6.distribution.dasher > 0, 'Wave 6 must introduce Dashers');
+
+  // Wave 9: Phantoms
+  const w9 = DifficultyDirector.getWaveConfig(9, 'endless', null, false);
+  assert.ok(w9.distribution.phantom > 0, 'Wave 9 must introduce Phantoms');
+
+  // Wave 10: Apex Boss
+  const w10 = DifficultyDirector.getWaveConfig(10, 'endless', null, false);
+  assert.strictEqual(w10.isBoss, true, 'Wave 10 must be designated boss encounter');
+
+  // Waves 21+: Bounded Scaling (Never turn into impossible bullet sponges or uncontrollable speeds)
+  const w25 = DifficultyDirector.getWaveConfig(25, 'endless', null, false);
+  assert.ok(w25.speedMult <= 1.25, `Speed multiplier (${w25.speedMult}) must never exceed 1.25 cap`);
+  assert.ok(w25.projSpeedMult <= 1.30, `Projectile speed multiplier (${w25.projSpeedMult}) must never exceed 1.30 cap`);
+  assert.ok(w25.attackMult <= 1.35, `Attack frequency multiplier (${w25.attackMult}) must never exceed 1.35 cap`);
+  assert.ok(w25.concurrentCap <= 24, `Desktop concurrent enemy cap (${w25.concurrentCap}) must never exceed 24`);
+
+  const w50Mobile = DifficultyDirector.getWaveConfig(50, 'endless', null, true);
+  assert.ok(w50Mobile.concurrentCap <= 18, `Mobile concurrent enemy cap (${w50Mobile.concurrentCap}) must never exceed 18 for performance`);
+});

@@ -29,13 +29,37 @@ const MIME_TYPES = {
 };
 
 // --- ATOMIC DATABASE ENGINE (JSON + BAK + SCHEMA MIGRATION) ---
-const DB_SCHEMA_VERSION = 2;
+const DB_SCHEMA_VERSION = 3;
+
+const RESERVED_USERNAMES = new Set([
+  'admin', 'administrator', 'moderator', 'mod', 'official', 'chronos', 'chrono',
+  'system', 'sys', 'root', 'support', 'guest', 'null', 'undefined', 'anonymous',
+  'apex', 'operator', 'supernova', 'void', 'valkyrie'
+]);
+
+function validateUsername(username) {
+  if (typeof username !== 'string') return { valid: false, reason: 'Username must be a valid text string.' };
+  const trimmed = username.trim();
+  if (trimmed.length < 3 || trimmed.length > 20) {
+    return { valid: false, reason: 'Username must be between 3 and 20 characters.' };
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+    return { valid: false, reason: 'Username can only contain letters, numbers, hyphens (-), and underscores (_).' };
+  }
+  const lower = trimmed.toLowerCase();
+  if (RESERVED_USERNAMES.has(lower)) {
+    return { valid: false, reason: `Username "${trimmed}" is reserved by system protocol.` };
+  }
+  return { valid: true, clean: trimmed, lower };
+}
 
 function createEmptyDb() {
   return {
     version: DB_SCHEMA_VERSION,
-    users: {},        // userId -> { id, username, passwordHash, salt, createdAt, profile }
+    users: {},        // userId -> { id, username, email, passwordHash, salt, createdAt, profile }
     usernames: {},    // lowercaseUsername -> userId
+    userEmails: {},   // lowercaseEmail -> userId
+    resetTokens: {},  // token -> { userId, expiresAt }
     sessions: {},     // tokenHash -> { userId, expiresAt }
     leaderboards: {
       endless: [],    // [{ runId, userId, displayName, avatar, score, wave, survivalTime, kills, maxCombo, styleRank, coreType, skinId, timestamp }]
@@ -52,13 +76,17 @@ function loadDatabase() {
         const raw = fs.readFileSync(file, 'utf8');
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
-          if (!parsed.version || parsed.version < DB_SCHEMA_VERSION) {
-            parsed.version = DB_SCHEMA_VERSION;
-            parsed.users = parsed.users || {};
-            parsed.usernames = parsed.usernames || {};
-            parsed.sessions = parsed.sessions || {};
-            parsed.leaderboards = parsed.leaderboards || { endless: [], daily: {} };
-            parsed.processedRuns = parsed.processedRuns || {};
+          parsed.version = DB_SCHEMA_VERSION;
+          parsed.users = parsed.users || {};
+          parsed.usernames = parsed.usernames || {};
+          parsed.userEmails = parsed.userEmails || {};
+          parsed.resetTokens = parsed.resetTokens || {};
+          parsed.sessions = parsed.sessions || {};
+          parsed.leaderboards = parsed.leaderboards || { endless: [], daily: {} };
+          parsed.processedRuns = parsed.processedRuns || {};
+          // Purge any fake seed entries
+          if (Array.isArray(parsed.leaderboards.endless)) {
+            parsed.leaderboards.endless = parsed.leaderboards.endless.filter(e => !e.runId?.startsWith('seed-') && !e.userId?.startsWith('system-'));
           }
           return parsed;
         }
@@ -444,61 +472,6 @@ function computeDailyChallengeConfig(dateInput = getTodaySeedString()) {
   };
 }
 
-// Seed initial leaderboard records if empty so players have benchmark targets
-function ensureSeedLeaderboard() {
-  if (db.leaderboards.endless.length === 0) {
-    db.leaderboards.endless = [
-      {
-        runId: 'seed-1',
-        userId: 'system-1',
-        displayName: 'KAELEN // VANGUARD',
-        avatar: 'vanguard',
-        score: 48500,
-        wave: 16,
-        survivalTime: 440,
-        kills: 215,
-        maxCombo: 28,
-        styleRank: 'SSS',
-        coreType: 'vanguard',
-        skinId: 'omega_chronos',
-        timestamp: Date.now() - 3600000 * 5
-      },
-      {
-        runId: 'seed-2',
-        userId: 'system-2',
-        displayName: 'NYX // VOID REAPER',
-        avatar: 'reaper',
-        score: 34200,
-        wave: 12,
-        survivalTime: 310,
-        kills: 164,
-        maxCombo: 21,
-        styleRank: 'SS',
-        coreType: 'reaper',
-        skinId: 'void_phantom',
-        timestamp: Date.now() - 3600000 * 12
-      },
-      {
-        runId: 'seed-3',
-        userId: 'system-3',
-        displayName: 'SERAPH // VALKYRIE',
-        avatar: 'valkyrie',
-        score: 22800,
-        wave: 10,
-        survivalTime: 245,
-        kills: 118,
-        maxCombo: 16,
-        styleRank: 'S',
-        coreType: 'valkyrie',
-        skinId: 'solar_valkyrie',
-        timestamp: Date.now() - 3600000 * 24
-      }
-    ];
-    saveDatabase();
-  }
-}
-ensureSeedLeaderboard();
-
 // --- HTTP JSON HELPER ---
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -566,71 +539,108 @@ async function handleApi(req, res) {
     return sendJson(res, 200, computeDailyChallengeConfig(dateStr));
   }
 
+  // 2b. Username Availability Check (Informational endpoint for client UX)
+  if (pathname === '/api/auth/username-available' && method === 'GET') {
+    const rawUser = urlObj.searchParams.get('username') || '';
+    const v = validateUsername(rawUser);
+    if (!v.valid) {
+      return sendJson(res, 200, { available: false, reason: v.reason, normalized: v.clean || '' });
+    }
+    const taken = !!db.usernames[v.lower];
+    return sendJson(res, 200, {
+      available: !taken,
+      reason: taken ? 'Callsign is already registered by another operative.' : 'Callsign is available.',
+      normalized: v.clean
+    });
+  }
+
   // 3. Auth: Register
   if (pathname === '/api/auth/register' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const username = typeof body.username === 'string' ? body.username.trim() : '';
+      const rawUsername = typeof body.username === 'string' ? body.username : '';
       const password = typeof body.password === 'string' ? body.password : '';
+      const email = typeof body.email === 'string' && body.email.includes('@') ? body.email.trim().toLowerCase() : null;
 
-      if (!/^[A-Za-z0-9_-]{3,20}$/.test(username)) {
-        return sendJson(res, 400, { error: 'Username must be 3-20 characters (letters, numbers, _ or -).' });
+      const v = validateUsername(rawUsername);
+      if (!v.valid) {
+        return sendJson(res, 400, { error: v.reason });
       }
+
       if (password.length < 6 || password.length > 128) {
-        return sendJson(res, 400, { error: 'Password must be between 6 and 128 characters.' });
+        return sendJson(res, 400, { error: 'Security key must be between 6 and 128 characters.' });
       }
 
-      const lower = username.toLowerCase();
-      if (db.usernames[lower]) {
-        return sendJson(res, 409, { error: 'Username is already registered.' });
+      // Hard database uniqueness enforcement
+      if (db.usernames[v.lower]) {
+        return sendJson(res, 409, { error: `Callsign "${v.clean}" is already registered. Please choose another.` });
+      }
+
+      if (email && db.userEmails && db.userEmails[email]) {
+        return sendJson(res, 409, { error: 'An operative account is already associated with this email address.' });
       }
 
       const userId = crypto.randomUUID();
       const { salt, hash } = hashPassword(password);
-      let profile = createDefaultProfile(userId, username.toUpperCase());
+      let profile = createDefaultProfile(userId, v.clean.toUpperCase());
+
+      // Safe merge of guest progress on account registration (never duplicate shards)
       if (body.guestProfile && typeof body.guestProfile === 'object') {
         profile = sanitizeAndMergeProfile(profile, body.guestProfile);
         profile.playerId = userId;
-        profile.displayName = username.toUpperCase();
+        profile.displayName = v.clean.toUpperCase();
       }
 
       db.users[userId] = {
         id: userId,
-        username,
+        username: v.clean,
+        email: email || undefined,
         passwordHash: hash,
         salt,
         createdAt: Date.now(),
         profile
       };
-      db.usernames[lower] = userId;
+      db.usernames[v.lower] = userId;
+      if (email) {
+        db.userEmails = db.userEmails || {};
+        db.userEmails[email] = userId;
+      }
       saveDatabase();
 
-      const token = issueToken(userId, username);
+      const token = issueToken(userId, v.clean);
       return sendJson(res, 201, {
         token,
-        user: { id: userId, username },
+        user: { id: userId, username: v.clean, email },
         profile
       });
     } catch (e) {
-      return sendJson(res, 400, { error: e.message || 'Invalid request' });
+      return sendJson(res, 400, { error: e.message || 'Invalid registration request' });
     }
   }
 
-  // 4. Auth: Login
+  // 4. Auth: Login (Supports username OR email)
   if (pathname === '/api/auth/login' && method === 'POST') {
     try {
       const body = await readJsonBody(req);
-      const username = typeof body.username === 'string' ? body.username.trim() : '';
+      const identifier = typeof body.username === 'string' ? body.username.trim() : (typeof body.email === 'string' ? body.email.trim() : '');
       const password = typeof body.password === 'string' ? body.password : '';
-      const lower = username.toLowerCase();
-      const userId = db.usernames[lower];
-      const user = userId ? db.users[userId] : null;
 
+      if (!identifier || !password) {
+        return sendJson(res, 400, { error: 'Callsign/email and password required.' });
+      }
+
+      const lower = identifier.toLowerCase();
+      let userId = db.usernames[lower];
+      if (!userId && db.userEmails) {
+        userId = db.userEmails[lower];
+      }
+
+      const user = userId ? db.users[userId] : null;
       if (!user || !verifyPassword(password, user.salt, user.passwordHash)) {
         return sendJson(res, 401, { error: 'Invalid operative callsign or security key.' });
       }
 
-      // Optional safe merge of guest progress on login
+      // Safe non-destructive merge of guest progress on login
       if (body.guestProfile && typeof body.guestProfile === 'object') {
         user.profile = sanitizeAndMergeProfile(user.profile, body.guestProfile);
         user.profile.playerId = user.id;
@@ -640,11 +650,155 @@ async function handleApi(req, res) {
       const token = issueToken(user.id, user.username);
       return sendJson(res, 200, {
         token,
-        user: { id: user.id, username: user.username },
+        user: { id: user.id, username: user.username, email: user.email },
         profile: user.profile
       });
     } catch (e) {
-      return sendJson(res, 400, { error: e.message || 'Invalid request' });
+      return sendJson(res, 400, { error: e.message || 'Invalid login request' });
+    }
+  }
+
+  // 4b. Auth: Forgot Password (Initiate recovery token)
+  if (pathname === '/api/auth/forgot-password' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const rawIdent = typeof body.emailOrUsername === 'string' ? body.emailOrUsername : (typeof body.identifier === 'string' ? body.identifier : '');
+      const identifier = rawIdent.trim().toLowerCase();
+      if (!identifier) {
+        return sendJson(res, 400, { error: 'Please enter your registered callsign or email.' });
+      }
+
+      let userId = db.usernames[identifier];
+      if (!userId && db.userEmails) userId = db.userEmails[identifier];
+
+      if (userId) {
+        const resetToken = crypto.randomBytes(24).toString('hex');
+        db.resetTokens = db.resetTokens || {};
+        db.resetTokens[resetToken] = {
+          userId,
+          expiresAt: Date.now() + 3600000 // 1 hour
+        };
+        saveDatabase();
+        return sendJson(res, 200, {
+          ok: true,
+          message: 'If an operative account exists, password recovery dispatch has been initialized.',
+          recoveryToken: resetToken,
+          resetToken: resetToken
+        });
+      }
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'If an operative account exists, password recovery dispatch has been initialized.'
+      });
+    } catch (e) {
+      return sendJson(res, 400, { error: 'Password recovery error' });
+    }
+  }
+
+  // 4c. Auth: Reset Password with Token
+  if (pathname === '/api/auth/reset-password' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const token = typeof body.token === 'string' ? body.token.trim() : '';
+      const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+      if (!token || !db.resetTokens || !db.resetTokens[token]) {
+        return sendJson(res, 400, { error: 'Invalid or expired password reset token.' });
+      }
+
+      const record = db.resetTokens[token];
+      if (Date.now() > record.expiresAt) {
+        delete db.resetTokens[token];
+        saveDatabase();
+        return sendJson(res, 400, { error: 'Recovery token has expired. Please request a new one.' });
+      }
+
+      if (newPassword.length < 6 || newPassword.length > 128) {
+        return sendJson(res, 400, { error: 'New password must be between 6 and 128 characters.' });
+      }
+
+      const user = db.users[record.userId];
+      if (!user) return sendJson(res, 404, { error: 'Operative profile not found.' });
+
+      const { salt, hash } = hashPassword(newPassword);
+      user.passwordHash = hash;
+      user.salt = salt;
+      delete db.resetTokens[token];
+      saveDatabase();
+
+      return sendJson(res, 200, { ok: true, message: 'Password updated successfully. You may now sign in.' });
+    } catch (e) {
+      return sendJson(res, 400, { error: 'Password update error' });
+    }
+  }
+
+  // 4d. Auth: Google OAuth Sign In / Provision
+  if (pathname === '/api/auth/oauth/google' && method === 'POST') {
+    try {
+      const body = await readJsonBody(req);
+      const email = typeof body.email === 'string' && body.email.includes('@') ? body.email.trim().toLowerCase() : null;
+      const googleSub = typeof body.sub === 'string' ? body.sub : (email || crypto.randomUUID());
+      const desiredName = typeof body.name === 'string' ? body.name.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16) : 'pilot';
+
+      if (!email && !googleSub) {
+        return sendJson(res, 400, { error: 'Google OAuth verification requires email or sub.' });
+      }
+
+      let userId = email && db.userEmails ? db.userEmails[email] : null;
+      let user = userId ? db.users[userId] : null;
+
+      if (!user) {
+        // Register new OAuth user with guaranteed unique callsign
+        userId = crypto.randomUUID();
+        let baseUsername = desiredName.length >= 3 ? desiredName : 'pilot';
+        let candidate = baseUsername;
+        let attempt = 1;
+        while (db.usernames[candidate.toLowerCase()] || RESERVED_USERNAMES.has(candidate.toLowerCase())) {
+          candidate = `${baseUsername}_${attempt++}`;
+        }
+
+        const { salt, hash } = hashPassword(crypto.randomBytes(32).toString('hex'));
+        let profile = createDefaultProfile(userId, candidate.toUpperCase());
+        if (body.guestProfile && typeof body.guestProfile === 'object') {
+          profile = sanitizeAndMergeProfile(profile, body.guestProfile);
+          profile.playerId = userId;
+          profile.displayName = candidate.toUpperCase();
+        }
+
+        user = {
+          id: userId,
+          username: candidate,
+          email: email || undefined,
+          googleSub,
+          passwordHash: hash,
+          salt,
+          createdAt: Date.now(),
+          profile
+        };
+        db.users[userId] = user;
+        db.usernames[candidate.toLowerCase()] = userId;
+        if (email) {
+          db.userEmails = db.userEmails || {};
+          db.userEmails[email] = userId;
+        }
+        saveDatabase();
+      } else {
+        if (body.guestProfile && typeof body.guestProfile === 'object') {
+          user.profile = sanitizeAndMergeProfile(user.profile, body.guestProfile);
+          user.profile.playerId = user.id;
+          saveDatabase();
+        }
+      }
+
+      const token = issueToken(user.id, user.username);
+      return sendJson(res, 200, {
+        token,
+        user: { id: user.id, username: user.username, email: user.email },
+        profile: user.profile
+      });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message || 'OAuth error' });
     }
   }
 
@@ -713,6 +867,9 @@ async function handleApi(req, res) {
       sortBy,
       page,
       total,
+      emptyMessage: total === 0
+        ? (mode === 'daily' ? 'No daily runs yet today. Play the daily challenge to claim rank 1.' : 'No verified runs yet. Complete a run to claim the first position.')
+        : null,
       entries
     });
   }
@@ -878,6 +1035,8 @@ if (require.main === module) {
 module.exports = {
   createAppServer,
   startServer,
+  validateUsername,
+  RESERVED_USERNAMES,
   validateRunSubmission,
   sanitizeAndMergeProfile,
   computeDailyChallengeConfig,

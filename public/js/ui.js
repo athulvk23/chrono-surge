@@ -243,7 +243,7 @@
   const lbState = { mode: 'endless', sortBy: 'score', page: 1, total: 0 };
   async function loadLeaderboard() {
     const body = $('lb-body');
-    body.innerHTML = '<div class="lb-state">Loading leaderboard…</div>';
+    body.innerHTML = '<div class="lb-state">Accessing verified telemetry…</div>';
     try {
       const qs = new URLSearchParams({ mode: lbState.mode, sortBy: lbState.sortBy, page: lbState.page, limit: 10 });
       const res = await fetch(`/api/leaderboard?${qs}`);
@@ -253,8 +253,8 @@
       $('lb-page').textContent = `Page ${data.page} of ${Math.max(1, Math.ceil(data.total / 10))}`;
       $('lb-prev').disabled = data.page <= 1;
       $('lb-next').disabled = data.page * 10 >= data.total;
-      if (!data.entries.length) {
-        body.innerHTML = `<div class="lb-state">${lbState.mode === 'daily' ? 'No daily runs yet today. Play the daily challenge to claim rank 1.' : 'No runs recorded yet. Finish a run to appear here.'}</div>`;
+      if (!data.entries || !data.entries.length) {
+        body.innerHTML = `<div class="lb-state">${lbState.mode === 'daily' ? 'No verified daily runs recorded today. Be the first operative to claim rank 1!' : 'No verified runs yet. Complete a run to claim the first position.'}</div>`;
         return;
       }
       const me = prog().profile.displayName;
@@ -263,24 +263,54 @@
         data.entries.map(e => `<tr class="${e.displayName === me ? 'me' : ''}"><td>${e.rank}</td><td><span class="lb-dot" style="--c:${(window.SKIN_CATALOG.find(s => s.id === e.skinId) || {}).primary || '#00f0ff'}"></span>${esc(e.displayName)}</td><td>${e.score.toLocaleString()}</td><td>${e.wave}</td><td>${fmtT(e.survivalTime)}</td><td>${esc(e.styleRank)}</td></tr>`).join('')
       }</tbody></table>`;
     } catch (e) {
-      // Offline / Static GitHub Pages fallback: display sector leaderboard with player score
-      const me = prog().profile.displayName;
-      const myScore = prog().profile.bestScore || 0;
-      const myWave = prog().profile.highestWave || 1;
-      const fmtT = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-      
-      const seedEntries = [
-        { rank: 1, displayName: 'APEX-CHRONOS', score: Math.max(128450, myScore + 5000), wave: 18, survivalTime: 540, styleRank: 'SSS', skinId: 'omega_chronos' },
-        { rank: 2, displayName: 'VOID-STALKER', score: Math.max(94200, myScore + 2000), wave: 14, survivalTime: 420, styleRank: 'SS', skinId: 'void_phantom' },
-        { rank: 3, displayName: me, score: myScore > 0 ? myScore : 72000, wave: myWave > 0 ? myWave : 9, survivalTime: prog().profile.longestSurvivalSec || 280, styleRank: prog().profile.maxStyleRank || 'S', skinId: prog().profile.equippedSkin || 'default_cyan' },
-        { rank: 4, displayName: 'CYBER-VALKYRIE', score: 61500, wave: 8, survivalTime: 230, styleRank: 'A', skinId: 'solar_valkyrie' },
-        { rank: 5, displayName: 'KINETIC-SURGE', score: 48900, wave: 6, survivalTime: 180, styleRank: 'B', skinId: 'default_cyan' }
-      ].sort((a, b) => b.score - a.score).map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+      // Direct Supabase Query or Honest Local History Fallback (Zero fake bots)
+      let entries = [];
+      if (window.ChronoSupabase && window.ChronoSupabase.isConfigured()) {
+        try {
+          const sbRes = await window.ChronoSupabase.getLeaderboard(lbState.mode, 10);
+          if (sbRes && sbRes.entries) entries = sbRes.entries;
+        } catch {
+          entries = [];
+        }
+      }
 
-      body.innerHTML = `<table class="lb-table"><thead><tr><th>#</th><th>Operative</th><th>Score</th><th>Wave</th><th>Time</th><th>Style</th></tr></thead><tbody>${
-        seedEntries.map(e => `<tr class="${e.displayName === me ? 'me' : ''}"><td>${e.rank}</td><td><span class="lb-dot" style="--c:${(window.SKIN_CATALOG.find(s => s.id === e.skinId) || {}).primary || '#00f0ff'}"></span>${esc(e.displayName)}</td><td>${e.score.toLocaleString()}</td><td>${e.wave}</td><td>${fmtT(e.survivalTime)}</td><td>${esc(e.styleRank)}</td></tr>`).join('')
-      }</tbody></table><div class="lb-state" style="margin-top:8px;font-size:0.75rem;color:#798ba8;">Sector Local Arena Telemetry Active</div>`;
+      const fmtT = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      if (entries.length > 0) {
+        lbState.total = entries.length;
+        $('lb-page').textContent = `Page 1 of 1`;
+        $('lb-prev').disabled = true;
+        $('lb-next').disabled = true;
+        const me = prog().profile.displayName;
+        body.innerHTML = `<table class="lb-table"><thead><tr><th>#</th><th>Operative</th><th>Score</th><th>Wave</th><th>Time</th><th>Style</th></tr></thead><tbody>${
+          entries.map(e => `<tr class="${e.displayName === me ? 'me' : ''}"><td>${e.rank}</td><td><span class="lb-dot" style="--c:${(window.SKIN_CATALOG.find(s => s.id === e.skinId) || {}).primary || '#00f0ff'}"></span>${esc(e.displayName)}</td><td>${e.score.toLocaleString()}</td><td>${e.wave}</td><td>${fmtT(e.survivalTime)}</td><td>${esc(e.styleRank)}</td></tr>`).join('')
+        }</tbody></table><div class="lb-state" style="margin-top:8px;font-size:0.75rem;color:#798ba8;">Direct Cloud Database Telemetry Active</div>`;
+        return;
+      }
+
+      // If no cloud entries, display verified runs recorded locally on this device
+      const localRuns = (prog().profile.runHistory || []).filter(r => !lbState.mode || r.mode === lbState.mode);
+      if (localRuns.length > 0) {
+        const sorted = [...localRuns].sort((a, b) => b.score - a.score).slice(0, 10);
+        const me = prog().profile.displayName;
+        body.innerHTML = `<table class="lb-table"><thead><tr><th>#</th><th>Operative</th><th>Score</th><th>Wave</th><th>Time</th><th>Style</th></tr></thead><tbody>${
+          sorted.map((e, idx) => `<tr class="me"><td>${idx + 1}</td><td><span class="lb-dot" style="--c:${(window.SKIN_CATALOG.find(s => s.id === (prog().profile.equippedSkin || 'default_cyan')) || {}).primary || '#00f0ff'}"></span>${esc(me)}</td><td>${e.score.toLocaleString()}</td><td>${e.wave}</td><td>${fmtT(e.survivalTimeSec || e.survivalTime || 0)}</td><td>${esc(e.styleRank || 'B')}</td></tr>`).join('')
+        }</tbody></table><div class="lb-state" style="margin-top:8px;font-size:0.75rem;color:#798ba8;">Local Device Verified Telemetry (Server offline)</div>`;
+      } else {
+        body.innerHTML = `<div class="lb-state">No verified runs recorded yet. Complete a run to claim the first position.</div>`;
+      }
     }
+  }
+
+  // ---------- profile & auth tabs ----------
+  function setAuthTab(tabName) {
+    const tabs = { login: $('tab-auth-login'), register: $('tab-auth-register'), forgot: $('tab-auth-forgot') };
+    const panes = { login: $('form-signin'), register: $('form-register'), forgot: $('form-forgot') };
+    Object.keys(tabs).forEach(k => {
+      if (tabs[k]) tabs[k].classList.toggle('active', k === tabName);
+      if (panes[k]) panes[k].classList.toggle('hidden', k !== tabName);
+    });
+    if ($('auth-error')) $('auth-error').textContent = '';
+    if ($('auth-success')) $('auth-success').textContent = '';
   }
 
   // ---------- profile & auth ----------
@@ -298,29 +328,145 @@
     const hist = p.runHistory || [];
     $('run-history').innerHTML = hist.length
       ? hist.slice(0, 8).map(r => `<div class="run-row"><span>${new Date(r.timestamp).toLocaleDateString()}</span><span>${esc(r.mode || 'endless')}</span><span>W${r.wave}</span><strong>${r.score.toLocaleString()}</strong></div>`).join('')
-      : '<div class="lb-state">No runs yet.</div>';
+      : '<div class="lb-state">No verified runs recorded yet.</div>';
+
     const signedIn = !!prog().token;
-    $('account-forms').classList.toggle('hidden', signedIn);
-    $('btn-logout').classList.toggle('hidden', !signedIn);
+    const badge = $('account-status-badge');
+    if (badge) {
+      badge.className = signedIn ? 'sync-pill status-cloud' : 'sync-pill status-local';
+      badge.textContent = signedIn ? 'CLOUD OPERATIVE' : 'GUEST MODE';
+    }
+
+    const formsBox = $('account-forms');
+    const signedBox = $('account-signed-in');
+    if (formsBox) formsBox.classList.toggle('hidden', signedIn);
+    if (signedBox) signedBox.classList.toggle('hidden', !signedIn);
+
+    if (signedIn) {
+      const uDisp = $('user-display-name');
+      const uId = $('user-account-id');
+      if (uDisp) uDisp.textContent = prog().user?.username || prog().profile.displayName || 'Operative';
+      if (uId) uId.textContent = prog().user?.id || prog().profile.playerId || '---';
+    }
+
     $('account-status').textContent = signedIn
       ? `Signed in as ${prog().user?.username || 'operative'}. Progress syncs to the cloud after runs and upgrades.`
       : 'Playing as guest. Progress is saved on this device only.';
-    $('auth-error').textContent = '';
+    
+    if ($('auth-error')) $('auth-error').textContent = '';
+    if ($('auth-success')) $('auth-success').textContent = '';
+  }
+
+  let checkAvailTimer = null;
+  function setupCallsignCheck() {
+    const regInput = $('reg-user');
+    const badge = $('callsign-avail-badge');
+    if (!regInput || !badge) return;
+    regInput.addEventListener('input', () => {
+      clearTimeout(checkAvailTimer);
+      const val = regInput.value.trim();
+      if (!val) {
+        badge.className = 'avail-badge';
+        badge.textContent = 'Check availability';
+        return;
+      }
+      if (val.length < 3) {
+        badge.className = 'avail-badge warn';
+        badge.textContent = 'Min 3 chars';
+        return;
+      }
+      if (!/^[a-zA-Z0-9_-]{3,20}$/.test(val)) {
+        badge.className = 'avail-badge err';
+        badge.textContent = 'Alphanumeric, _ - only';
+        return;
+      }
+      badge.className = 'avail-badge checking';
+      badge.textContent = 'Checking…';
+      checkAvailTimer = setTimeout(async () => {
+        try {
+          const res = await prog().checkUsernameAvailability(val);
+          if (res.available) {
+            badge.className = 'avail-badge avail';
+            badge.textContent = '✓ Available';
+          } else {
+            badge.className = 'avail-badge err';
+            badge.textContent = `✗ ${res.reason || 'Unavailable'}`;
+          }
+        } catch {
+          badge.className = 'avail-badge warn';
+          badge.textContent = 'Offline check';
+        }
+      }, 350);
+    });
   }
 
   async function doAuth(kind) {
-    const u = $('auth-user').value.trim();
-    const pw = $('auth-pass').value;
-    $('auth-error').textContent = '';
+    const errEl = $('auth-error');
+    const succEl = $('auth-success');
+    if (errEl) errEl.textContent = '';
+    if (succEl) succEl.textContent = '';
     try {
-      if (kind === 'login') await prog().loginAccount(u, pw);
-      else await prog().registerAccount(u, pw);
-      $('auth-pass').value = '';
-      toast(kind === 'login' ? 'Cloud profile restored' : 'Account created — progress uploaded', 'success');
+      if (kind === 'login') {
+        const u = $('auth-user').value.trim();
+        const pw = $('auth-pass').value;
+        if (!u || !pw) {
+          if (errEl) errEl.textContent = 'Enter your callsign/email and security key.';
+          return;
+        }
+        await prog().loginAccount(u, pw);
+        if ($('auth-pass')) $('auth-pass').value = '';
+        toast('Cloud profile restored', 'success');
+      } else if (kind === 'register') {
+        const u = $('reg-user').value.trim();
+        const email = $('reg-email').value.trim() || null;
+        const pw = $('reg-pass').value;
+        if (!u || !pw) {
+          if (errEl) errEl.textContent = 'Callsign and security key are required.';
+          return;
+        }
+        if (pw.length < 6) {
+          if (errEl) errEl.textContent = 'Security key must be at least 6 characters.';
+          return;
+        }
+        await prog().registerAccount(u, pw, email);
+        if ($('reg-pass')) $('reg-pass').value = '';
+        toast('Account created — guest progress uploaded', 'success');
+      }
       renderProfile();
       refreshAllMetaUI();
     } catch (e) {
-      $('auth-error').textContent = e.message || 'Could not reach the server. Try again when online.';
+      if (errEl) errEl.textContent = e.message || 'Authentication failed. Please verify credentials.';
+    }
+  }
+
+  async function doForgot() {
+    const ident = $('forgot-ident').value.trim();
+    const errEl = $('auth-error');
+    const succEl = $('auth-success');
+    if (errEl) errEl.textContent = '';
+    if (succEl) succEl.textContent = '';
+    if (!ident) {
+      if (errEl) errEl.textContent = 'Enter your callsign or email address.';
+      return;
+    }
+    try {
+      const res = await prog().requestPasswordReset(ident);
+      if (succEl) succEl.textContent = res.message || 'Recovery dispatched. Check your instructions to reset key.';
+      toast('Recovery request dispatched', 'info');
+    } catch (e) {
+      if (errEl) errEl.textContent = e.message || 'Recovery request failed.';
+    }
+  }
+
+  async function doGoogleAuth() {
+    const errEl = $('auth-error');
+    if (errEl) errEl.textContent = '';
+    try {
+      await prog().loginWithGoogle();
+      renderProfile();
+      refreshAllMetaUI();
+    } catch (e) {
+      if (errEl) errEl.textContent = e.message || 'Google authentication failed.';
     }
   }
 
@@ -428,10 +574,43 @@
     $('btn-register').onclick = () => doAuth('register');
     $('btn-logout').onclick = () => { prog().logout(); toast('Signed out. Local progress kept on this device.', 'info'); renderProfile(); };
 
+    // Auth Terminal Tabs
+    $('tab-auth-login')?.addEventListener('click', () => setAuthTab('login'));
+    $('tab-auth-register')?.addEventListener('click', () => setAuthTab('register'));
+    $('tab-auth-forgot')?.addEventListener('click', () => setAuthTab('forgot'));
+
+    // Auth Buttons & Guest Continuations
+    $('btn-google-auth')?.addEventListener('click', doGoogleAuth);
+    $('btn-forgot-submit')?.addEventListener('click', doForgot);
+    $('btn-sync-now')?.addEventListener('click', async () => {
+      try {
+        toast('Synchronizing with cloud…', 'info');
+        await prog().syncToCloud();
+        toast('Cloud profile synchronized', 'success');
+      } catch (e) {
+        toast('Sync failed: ' + (e.message || 'offline'), 'error');
+      }
+    });
+    $('btn-continue-guest-1')?.addEventListener('click', () => UI.closePanel('screen-profile'));
+    $('btn-continue-guest-2')?.addEventListener('click', () => UI.closePanel('screen-profile'));
+    setupCallsignCheck();
+
     ['set-master', 'set-music', 'set-sfx'].forEach(id => $(id).addEventListener('input', saveSettings));
     ['set-muted', 'set-reduced', 'set-contrast', 'set-crt', 'set-aim', 'set-touch'].forEach(id => $(id).addEventListener('change', saveSettings));
     $('btn-reset-keys').onclick = () => { prog().profile.settings.keyBindings = { ...DEFAULT_BINDS }; prog().saveLocalProfile(); renderSettings(); toast('Controls reset', 'info'); };
     $('btn-fullscreen').onclick = toggleFullscreen;
+    $('btn-replay-tutorial')?.addEventListener('click', () => {
+      UI.closePanel('screen-settings');
+      const titleEl = $('screen-title');
+      if (titleEl) {
+        titleEl.classList.remove('active');
+        titleEl.classList.add('hidden');
+      }
+      if (window.game && typeof window.game.startNewGame === 'function') {
+        window.game.startNewGame(window.game.activeCore || 'vanguard', 'tutorial');
+      }
+      if (typeof window.updateTouchControlsVisibility === 'function') window.updateTouchControlsVisibility();
+    });
     $('btn-export-save').onclick = () => {
       const blob = new Blob([JSON.stringify(prog().profile, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');

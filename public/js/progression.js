@@ -453,6 +453,9 @@ class ProgressionSystem {
     // Submit to backend leaderboard & cloud save
     try {
       this.notifyStatus('SYNCING', 'Uploading run telemetry...');
+      if (window.chronoSupabase?.isAvailable()) {
+        window.chronoSupabase.submitRun(entry);
+      }
       const headers = { 'Content-Type': 'application/json' };
       if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
       const res = await fetch('/api/runs', {
@@ -466,7 +469,7 @@ class ProgressionSystem {
           this.profile = this.migrateProfile(data.profile);
           this.saveLocalProfile();
         }
-        this.notifyStatus(this.token ? 'SYNCED' : 'LOCAL', 'Run recorded on leaderboard');
+        this.notifyStatus(this.token ? 'SYNCED' : 'LOCAL', 'Run verified & recorded on leaderboard');
       } else {
         throw new Error('Server rejected or unavailable');
       }
@@ -482,6 +485,14 @@ class ProgressionSystem {
 
   // --- CLOUD AUTHENTICATION & SYNC ---
   async checkInitialSession() {
+    if (window.chronoSupabase?.isAvailable() && window.chronoSupabase.client) {
+      const { data } = await window.chronoSupabase.client.auth.getSession();
+      if (data?.session) {
+        this.handleSupabaseSession(data.session);
+        return;
+      }
+    }
+
     if (!this.token) {
       this.notifyStatus('LOCAL', 'Guest local profile active');
       this.flushPendingRuns();
@@ -495,7 +506,6 @@ class ProgressionSystem {
       if (res.ok) {
         const data = await res.json();
         this.user = data.user;
-        // Reconcile local & cloud safely
         await this.syncToCloud();
         await this.flushPendingRuns();
       } else {
@@ -506,12 +516,33 @@ class ProgressionSystem {
     }
   }
 
-  async registerAccount(username, password) {
+  async checkUsernameAvailability(username) {
+    if (window.chronoSupabase?.isAvailable()) {
+      return await window.chronoSupabase.checkUsernameAvailable(username);
+    }
+    try {
+      const res = await fetch(`/api/auth/username-available?username=${encodeURIComponent(username.trim())}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return { available: true, normalized: username.trim() };
+  }
+
+  async registerAccount(username, password, email = null) {
     this.notifyStatus('SYNCING', 'Creating Operative Cloud Account...');
+
+    if (window.chronoSupabase?.isAvailable()) {
+      const data = await window.chronoSupabase.signUp(email || `${username}@chronosurge.net`, password, username, this.profile);
+      this.user = { id: data.user.id, username: username, email: email || data.user.email };
+      this.profile.displayName = username.toUpperCase();
+      this.saveLocalProfile();
+      this.notifyStatus('SYNCED', `Signed in as ${username}`);
+      return data;
+    }
+
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, guestProfile: this.profile })
+      body: JSON.stringify({ username, password, email, guestProfile: this.profile })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -527,12 +558,21 @@ class ProgressionSystem {
     return data;
   }
 
-  async loginAccount(username, password) {
+  async loginAccount(identifier, password) {
     this.notifyStatus('SYNCING', 'Authenticating Operative...');
+
+    if (window.chronoSupabase?.isAvailable()) {
+      const data = await window.chronoSupabase.signInWithPassword(identifier, password);
+      this.user = { id: data.user.id, username: data.user.user_metadata?.username || identifier, email: data.user.email };
+      this.saveLocalProfile();
+      this.notifyStatus('SYNCED', `Cloud profile restored: ${this.user.username}`);
+      return data;
+    }
+
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, guestProfile: this.profile })
+      body: JSON.stringify({ username: identifier, password, guestProfile: this.profile })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -549,11 +589,51 @@ class ProgressionSystem {
     return data;
   }
 
+  async loginWithGoogle() {
+    if (window.chronoSupabase?.isAvailable()) {
+      return await window.chronoSupabase.signInWithGoogle();
+    }
+    throw new Error('Google OAuth requires Supabase configuration in Settings.');
+  }
+
+  async requestPasswordReset(emailOrUsername) {
+    if (window.chronoSupabase?.isAvailable() && emailOrUsername.includes('@')) {
+      return await window.chronoSupabase.requestPasswordReset(emailOrUsername);
+    }
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailOrUsername })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Recovery request failed.');
+    return data;
+  }
+
+  handleSupabaseSession(session) {
+    if (!session || !session.user) return;
+    const u = session.user;
+    this.token = session.access_token;
+    this.user = {
+      id: u.id,
+      username: u.user_metadata?.username || u.email?.split('@')[0] || 'pilot',
+      email: u.email
+    };
+    localStorage.setItem(AUTH_TOKEN_KEY, this.token);
+    this.profile.displayName = this.user.username.toUpperCase();
+    this.saveLocalProfile();
+    this.notifyStatus('SYNCED', `Google authenticated: ${this.user.username}`);
+    if (window.refreshAllMetaUI) window.refreshAllMetaUI();
+  }
+
   logout() {
+    if (window.chronoSupabase?.isAvailable()) {
+      window.chronoSupabase.signOut();
+    }
     this.token = null;
     this.user = null;
     localStorage.removeItem(AUTH_TOKEN_KEY);
-    this.notifyStatus('LOCAL', 'Signed out (Local Guest Mode)');
+    this.notifyStatus('LOCAL', 'Signed out (Local Guest Mode Active)');
   }
 
   async syncToCloud() {
